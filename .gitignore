@@ -1,0 +1,41 @@
+# ── MICC GitHub-safe ignore rules ─────────────────────────────
+
+# Secrets / environment
+.env
+*.env
+!.env.example
+
+# The data lives locally only — never push it (multi-GB)
+data_storage/
+
+# Per-script logs and run state
+data_extraction/logs/
+logs/
+pipeline_state.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Data / binary artifacts (belt-and-suspenders)
+*.parquet
+*.duckdb
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.zip
+*.csv
+*.xml
+*.DAT
+*.pkl
+*.bin
+*.pickle
+*.jsonl
+
+# Node (legacy, if any)
+node_modules/
+.next/
+out/
