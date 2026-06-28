@@ -4,7 +4,7 @@ MICC v2 — F&O Bhavcopy Backfill (FIXED v2)
 ============================================
 Fixes vs v1:
   1. Probes existing fo_data schema first — uses ALTER TABLE to add
-     any missing columns (option_type etc.) rather than assuming schema
+     any missing columns (option_typ etc.) rather than assuming schema
   2. Builds INSERT SQL dynamically from actual table columns
   3. Handles both standard UDiFF and older NSE CSV column names
   4. --probe flag to inspect existing fo_data schema
@@ -54,6 +54,11 @@ NSE_FO_URL = (
     "https://nsearchives.nseindia.com/content/fo/"
     "BhavCopy_NSE_FO_0_0_0_{date_str}_F_0000.csv.zip"
 )
+# Legacy F&O bhavcopy (pre-2024-07), e.g. .../2020/JAN/fo01JAN2020bhav.csv.zip
+OLD_FO_URL = (
+    "https://nsearchives.nseindia.com/content/historical/DERIVATIVES/"
+    "{year}/{mon}/fo{dmy}bhav.csv.zip"
+)
 
 HEADERS = {
     "User-Agent": (
@@ -75,14 +80,14 @@ DESIRED_COLS = {
     "symbol":      "TEXT",
     "expiry":      "TEXT",
     "strike":      "REAL",
-    "option_type": "TEXT",
+    "option_typ": "TEXT",
     "open":        "REAL",
     "high":        "REAL",
     "low":         "REAL",
     "close":       "REAL",
     "settle_pr":   "REAL",
     "contracts":   "INTEGER",
-    "val_lakh":    "REAL",
+    "val_inlakh":    "REAL",
     "open_int":    "INTEGER",
     "chg_in_oi":   "INTEGER",
 }
@@ -145,7 +150,7 @@ def setup_table(conn: sqlite3.Connection):
         conn.execute(f"""
             CREATE TABLE fo_data (
                 {col_defs},
-                PRIMARY KEY (date, instrument, symbol, expiry, strike, option_type)
+                PRIMARY KEY (date, instrument, symbol, expiry, strike, option_typ)
             )
         """)
         print("[Setup] Created fo_data table fresh")
@@ -203,16 +208,21 @@ def nse_session() -> requests.Session:
 
 
 def download_fo_zip(session: requests.Session, trade_date: date):
-    date_str = trade_date.strftime("%Y%m%d")
-    url = NSE_FO_URL.format(date_str=date_str)
-    try:
-        resp = session.get(url, timeout=30, verify=True)
-        if resp.status_code == 200 and len(resp.content) > 1000:
-            return resp.content
-        return None
-    except Exception as e:
-        print(f"    Download error: {e}")
-        return None
+    # Try UDiFF (2024-07+) first, then the legacy historical archive (pre-2024-07).
+    udiff = NSE_FO_URL.format(date_str=trade_date.strftime("%Y%m%d"))
+    legacy = OLD_FO_URL.format(
+        year=trade_date.strftime("%Y"),
+        mon=trade_date.strftime("%b").upper(),
+        dmy=trade_date.strftime("%d%b%Y").upper(),
+    )
+    for url in (udiff, legacy):
+        try:
+            resp = session.get(url, timeout=30, verify=True)
+            if resp.status_code == 200 and len(resp.content) > 1000:
+                return resp.content
+        except Exception as e:
+            print(f"    Download error: {e}")
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,8 +252,8 @@ def parse_fo_zip(zip_bytes: bytes, trade_date: date):
         "EXPIRYDATE":   "expiry",
         "STRIKE_PR":    "strike",
         "STRIKEPRICE":  "strike",
-        "OPTION_TYP":   "option_type",
-        "OPTIONTYPE":   "option_type",
+        "OPTION_TYP":   "option_typ",
+        "OPTIONTYPE":   "option_typ",
         "OPEN":         "open",
         "HIGH":         "high",
         "LOW":          "low",
@@ -251,14 +261,29 @@ def parse_fo_zip(zip_bytes: bytes, trade_date: date):
         "SETTLE_PR":    "settle_pr",
         "SETTLPRICE":   "settle_pr",
         "CONTRACTS":    "contracts",
-        "VAL_INLAKH":   "val_lakh",
-        "VALINLAKH":    "val_lakh",
-        "VALUE":        "val_lakh",
+        "VAL_INLAKH":   "val_inlakh",
+        "VALINLAKH":    "val_inlakh",
+        "VALUE":        "val_inlakh",
         "OPEN_INT":     "open_int",
         "OPENINT":      "open_int",
         "OPENINTEREST": "open_int",
         "CHG_IN_OI":    "chg_in_oi",
         "CHGINOI":      "chg_in_oi",
+        # UDiFF F&O format (2024-07 onward)
+        "TCKRSYMB":        "symbol",
+        "FININSTRMTP":     "instrument",
+        "XPRYDT":          "expiry",
+        "STRKPRIC":        "strike",
+        "OPTNTP":          "option_typ",
+        "OPNPRIC":         "open",
+        "HGHPRIC":         "high",
+        "LWPRIC":          "low",
+        "CLSPRIC":         "close",
+        "STTLMPRIC":       "settle_pr",
+        "TTLTRADGVOL":     "contracts",
+        "TTLTRFVAL":       "val_inlakh",
+        "OPNINTRST":       "open_int",
+        "CHNGINOPNINTRST": "chg_in_oi",
     }
     df.rename(
         columns={k: v for k, v in col_map.items() if k in df.columns},
@@ -274,7 +299,7 @@ def parse_fo_zip(zip_bytes: bytes, trade_date: date):
             df[col] = None
 
     # Clean string columns
-    for col in ["instrument", "symbol", "option_type"]:
+    for col in ["instrument", "symbol", "option_typ"]:
         df[col] = df[col].astype(str).str.strip().str.upper()
         df[col] = df[col].replace({"NAN": "", "NONE": ""})
 
@@ -284,7 +309,7 @@ def parse_fo_zip(zip_bytes: bytes, trade_date: date):
     df["expiry"] = df["expiry"].where(df["expiry"].notna(), "")
 
     # Numeric
-    for col in ["strike", "open", "high", "low", "close", "settle_pr", "val_lakh"]:
+    for col in ["strike", "open", "high", "low", "close", "settle_pr", "val_inlakh"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     for col in ["contracts", "open_int", "chg_in_oi"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
