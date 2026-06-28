@@ -12,7 +12,7 @@ os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 import yfinance as yf
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
-STOCKS_DIR = Path("stocks/all")
+STOCKS_DIR = Path(r"D:\marketDB\stocks\all")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\corporate_actions.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

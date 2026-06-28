@@ -87,10 +87,13 @@ for col, typ in ALL_COLS:
         conn.execute(f"ALTER TABLE screener_fundamentals_v2 ADD COLUMN {col} {typ}")
 conn.commit()
 
-rows_q = conn.execute(
-    "SELECT symbol FROM symbol_conviction ORDER BY CAST(conviction_score AS REAL) DESC LIMIT ?",
-    (LIMIT,)
-).fetchall()
+try:
+    rows_q = conn.execute(
+        "SELECT symbol FROM symbol_conviction ORDER BY CAST(conviction_score AS REAL) DESC LIMIT ?",
+        (LIMIT,)
+    ).fetchall()
+except sqlite3.OperationalError:
+    rows_q = []   # symbol_conviction table not present in this project; fall back
 if not rows_q:
     rows_q = conn.execute("SELECT DISTINCT symbol FROM stock_data ORDER BY symbol LIMIT ?", (LIMIT,)).fetchall()
 symbols = [r[0] for r in rows_q]

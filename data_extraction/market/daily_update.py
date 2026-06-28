@@ -183,8 +183,24 @@ def make_nse_session():
 # ---------- 1. Stocks (OHLCV) ----------
 def update_stocks(conn, dates: list):
     if not dates: return
+    # Ensure the table exists (first run / fresh DB)
+    conn.execute("""CREATE TABLE IF NOT EXISTS stock_data (
+        symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+        PRIMARY KEY(symbol, date))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_data_date ON stock_data(date)")
     symbols = [r[0] for r in conn.execute("SELECT DISTINCT symbol FROM stock_data ORDER BY symbol").fetchall()]
-    if not symbols: return
+    if not symbols:
+        # Bootstrap the universe from the tradable EQ registry (run build_tradable_universe.py first)
+        try:
+            symbols = [r[0] for r in conn.execute(
+                "SELECT symbol FROM tradable_eq_stocks ORDER BY symbol").fetchall()]
+            if symbols:
+                log.info(f"Bootstrapping stock_data universe from tradable_eq_stocks: {len(symbols)} symbols")
+        except sqlite3.OperationalError:
+            pass
+    if not symbols:
+        log.warning("No symbols to update; run build_tradable_universe.py first to seed the universe.")
+        return
     min_cov = int(len(symbols) * 0.90)
     have = set()
     for d in dates:
@@ -460,6 +476,11 @@ def update_fo(session, dates: list):
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         try:
+            # Ensure fo_data matches this bhavcopy's (dynamic) columns; (re)create if empty/mismatched
+            cur_cols = {r[1] for r in conn.execute("PRAGMA table_info(fo_data)").fetchall()}
+            if not set(df.columns).issubset(cur_cols):
+                if not cur_cols or conn.execute("SELECT COUNT(*) FROM fo_data").fetchone()[0] == 0:
+                    df.head(0).to_sql("fo_data", conn, if_exists="replace", index=False)
             cols = list(df.columns)
             placeholders = ",".join(["?"]*len(cols))
             sql = f"INSERT OR IGNORE INTO fo_data ({','.join(cols)}) VALUES ({placeholders})"
@@ -530,6 +551,29 @@ def update_india_vix(conn, dates: list):
         log.error(f"India VIX error: {e}")
 
 # ---------- Main ----------
+def create_core_tables(conn):
+    """Create core tables if missing (first run / fresh DB).
+    fo_data is created on the fly from the F&O bhavcopy schema in update_fo()."""
+    conn.executescript('''
+        CREATE TABLE IF NOT EXISTS stock_data (
+            symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+            PRIMARY KEY(symbol, date));
+        CREATE INDEX IF NOT EXISTS idx_stock_data_date ON stock_data(date);
+        CREATE TABLE IF NOT EXISTS indices_data (
+            name TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, adj_close REAL,
+            PRIMARY KEY(name, date));
+        CREATE TABLE IF NOT EXISTS global_data (
+            ticker TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+            PRIMARY KEY(ticker, date));
+        CREATE TABLE IF NOT EXISTS fii_dii_data (
+            date TEXT, participant TEXT, segment TEXT,
+            buy_contracts REAL, buy_value REAL, sell_contracts REAL, sell_value REAL,
+            net_contracts REAL, net_value REAL,
+            PRIMARY KEY(date, participant, segment));
+    ''')
+    conn.commit()
+
+
 def main():
     setup_logging()
     if not is_trading_day(TODAY):
@@ -551,6 +595,7 @@ def main():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=30000")
+    create_core_tables(conn)
 
     log.info("── [1/7] Stocks ──────────────────────────────────────")
     update_stocks(conn, dates)

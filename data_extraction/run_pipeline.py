@@ -113,6 +113,7 @@ def run_phase(name, script_rel, desc, state, args=None, timeout=1800):
 # (phase_key, script_relative_path, description, args, timeout)
 DAILY_PHASES = [
     ("core",        "market/daily_update.py",                  "Core: Stocks + Indices + F&O + Global", None, 1200),
+    ("parquet",     "common/export_parquet.py",                "Export stock_data -> per-symbol parquet", None, 600),
     ("delivery",    "market/update_delivery.py",               "Delivery % (nselib)",                   None, 300),
     ("fii_dii",     "market/fetch_nse_data.py",                "FII/DII activity (direct NSE API)",     ["--fii"], 300),
     ("global_idx",  "market/phase9a_fetch_global_indices.py",  "Global indices (yfinance)",             None, 600),

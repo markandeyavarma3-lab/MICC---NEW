@@ -20,7 +20,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("bse_registry")
 
-BSE_EQ_URL = "https://www.bseindia.com/download/BhavCopy/Equity/EQ_ISINCODE_CSV.zip"
+BSE_API_URL = ("https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
+               "?Group=&Scripcode=&industry=&segment=Equity&status=Active")
 
 def create_table(conn):
     conn.execute("""
@@ -38,19 +39,30 @@ def create_table(conn):
     conn.commit()
 
 def download_bse_list():
-    """Download and parse the BSE equity ISIN file (CSV inside ZIP)."""
-    headers = {"User-Agent": "Mozilla/5.0"}
+    """Fetch the active BSE equity list from the BSE JSON API.
+    (The old EQ_ISINCODE_CSV.zip endpoint is dead / anti-bot protected.)"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.bseindia.com/",
+        "Origin": "https://www.bseindia.com",
+    }
     try:
-        resp = requests.get(BSE_EQ_URL, headers=headers, timeout=30)
+        s = requests.Session()
+        s.headers.update(headers)
+        s.get("https://www.bseindia.com/", timeout=15)  # prime cookies
+        resp = s.get(BSE_API_URL, timeout=30)
         if resp.status_code != 200:
             log.error(f"Failed to download BSE list. HTTP {resp.status_code}")
             return None
-        # It's a ZIP containing a CSV
-        import zipfile
-        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-            csv_name = [n for n in zf.namelist() if n.endswith('.csv')][0]
-            with zf.open(csv_name) as f:
-                df = pd.read_csv(f)
+        df = pd.DataFrame(resp.json())
+        if df.empty:
+            log.error("BSE API returned no records.")
+            return None
+        # Normalize to the columns update_registry expects
+        df = df.rename(columns={
+            "SCRIP_CD": "SC_CODE", "Scrip_Name": "SC_NAME", "ISIN_NUMBER": "ISIN_CODE",
+        })
         return df
     except Exception as e:
         log.error(f"Error downloading BSE list: {e}")

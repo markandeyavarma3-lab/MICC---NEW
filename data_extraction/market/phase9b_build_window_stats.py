@@ -1164,8 +1164,14 @@ def main():
 
         elif indices_only:
             log("=== NSE Indices ===")
-            nse_idx = [r[0] for r in conn.execute(
-                "SELECT DISTINCT index_name FROM market_snapshot ORDER BY index_name").fetchall()]
+            try:
+                nse_idx = [r[0] for r in conn.execute(
+                    "SELECT DISTINCT index_name FROM market_snapshot ORDER BY index_name").fetchall()]
+            except sqlite3.OperationalError:
+                nse_idx = []
+            if not nse_idx:   # market_snapshot not in this project; use indices_data
+                nse_idx = [r[0] for r in conn.execute(
+                    "SELECT DISTINCT name FROM indices_data ORDER BY name").fetchall()]
             run_batch(conn, nse_idx, "index",
                       lambda s: load_index_full(conn, s),
                       regime_map, benchmarks, layers, resume)
@@ -1188,8 +1194,14 @@ def main():
 
         else:
             log("=== STEP 1/3: NSE Indices ===")
-            nse_idx = [r[0] for r in conn.execute(
-                "SELECT DISTINCT index_name FROM market_snapshot ORDER BY index_name").fetchall()]
+            try:
+                nse_idx = [r[0] for r in conn.execute(
+                    "SELECT DISTINCT index_name FROM market_snapshot ORDER BY index_name").fetchall()]
+            except sqlite3.OperationalError:
+                nse_idx = []
+            if not nse_idx:   # market_snapshot not in this project; use indices_data
+                nse_idx = [r[0] for r in conn.execute(
+                    "SELECT DISTINCT name FROM indices_data ORDER BY name").fetchall()]
             run_batch(conn, nse_idx, "index",
                       lambda s: load_index_full(conn, s),
                       regime_map, benchmarks, layers, resume)
