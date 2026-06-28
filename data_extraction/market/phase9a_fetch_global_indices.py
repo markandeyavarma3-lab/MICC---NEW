@@ -298,9 +298,10 @@ def main():
         log(f"DB not found: {DB_PATH}", "FAIL")
         sys.exit(1)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=180)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=180000")
 
     try:
         if verify:
