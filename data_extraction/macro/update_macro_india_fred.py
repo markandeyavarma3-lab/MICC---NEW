@@ -26,14 +26,32 @@ log = logging.getLogger("india_macro_fred")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")  # set FRED_API_KEY in your environment
 
 # Series metadata: (fred_id, display_name, frequency)
+# Broad FRED India coverage. Some OECD-sourced series stopped updating ~2020-23
+# but their historical values remain valuable; the loop skips any that error/empty.
 INDIA_SERIES = {
-    "INDCPIALLQINMEI":   ("India CPI (OECD)", "quarterly"),
-    # "INDGDPRQDSMEI":    ("India Real GDP Growth", "quarterly"),          # → now from World Bank
-    # "LRUN64TTINQ156S":  ("India Unemployment Rate", "quarterly"),        # → now from World Bank
-    # "IRLTLT01INM156N":  ("India 10Y Bond Yield", "monthly"),            # → add later from RBI if needed
-    "TRESEGINM194N":    ("India Forex Reserves (USD)", "monthly"),
-    "XTEXVA01INM664S":  ("India Exports (USD)", "monthly"),
-    "XTIMVA01INM664S":  ("India Imports (USD)", "monthly"),
+    # Prices / inflation
+    "INDCPIALLMINMEI":   ("India CPI (monthly, OECD)", "monthly"),
+    "INDCPIALLQINMEI":   ("India CPI (quarterly, OECD)", "quarterly"),
+    "FPCPITOTLZGIND":    ("India Inflation, CPI (annual %)", "annual"),
+    # Rates
+    "IRLTLT01INM156N":   ("India 10Y Govt Bond Yield", "monthly"),
+    "INTDSRINM193N":     ("India Deposit Interest Rate", "monthly"),
+    "IR3TIB01INM156N":   ("India 3M Interbank Rate", "monthly"),
+    # Money supply
+    "MABMM301INM189S":   ("India Broad Money M3", "monthly"),
+    "MANMM101INM189S":   ("India Narrow Money M1", "monthly"),
+    # Activity / production
+    "INDPROINDMISMEI":   ("India Industrial Production (IIP)", "monthly"),
+    # GDP / consumption
+    "MKTGDPINA646NWDB":  ("India GDP (current USD, WB)", "annual"),
+    "NYGDPPCAPKDIND":    ("India GDP per capita (constant)", "annual"),
+    # External
+    "TRESEGINM194N":     ("India Forex Reserves (USD)", "monthly"),
+    "XTEXVA01INM664S":   ("India Exports (USD)", "monthly"),
+    "XTIMVA01INM664S":   ("India Imports (USD)", "monthly"),
+    # Markets
+    "SPASTT01INM661N":   ("India Share Prices Index", "monthly"),
+    "CCRETT01INM661N":   ("India Consumer Confidence", "monthly"),
 }
 
 def create_table(conn):

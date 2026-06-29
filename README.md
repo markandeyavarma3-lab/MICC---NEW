@@ -156,13 +156,19 @@ py -3.14 market\fetch_deals.py                 # bulk/block/short — run daily
 py -3.14 market\fetch_fo_ban.py                # F&O ban — run daily
 ```
 
-### Tier 2 — official / free, planned
+### Tier 2 — 4 of 5 done
 
-- **AMFI monthly flows** — AUM, SIP inflows, folio counts (amfiindia.com); the domestic counterweight to FII/DII.
-- **MF portfolio holdings** (monthly disclosure) — institutional positioning per stock.
-- **India high-frequency macro** — GST collections, PMI (mfg/services), FADA auto sales, e-way bills, power demand (Grid-India), RBI weekly (forex reserves, credit/deposit), monthly trade.
-- **IPO data** — GMP, subscription, listing gains (mainboard + SME), IPO calendar.
-- **News headlines (RSS)** — Pulse/ET/Moneycontrol/NSE feeds for per-stock NLP sentiment.
+| Dataset | Script → table | Status |
+|---|---|---|
+| **News headlines** | `events/fetch_news.py` → `news_headlines` | ✅ 5 RSS feeds (ET/Pulse/MC); daily |
+| **IPO data** (GMP/sub/listing) | `events/fetch_ipo.py` → `ipo_data` | ✅ investorgain JSON; daily |
+| **India macro** | `macro/update_macro_india_fred.py --backfill` → `india_macro_fred` | ✅ 14 FRED series, 2010→2026 (was 4) |
+| **AMFI MF industry flows** | `funds/backfill_amfi_industry.py` → `mf_industry_monthly` | ✅ 87 months 2019→2026 (schemes/folios/funds-mobilized/net-flow/AUM by category) |
+| **MF portfolio holdings** | — | ⏸ not done — per-AMC monthly **PDF**, 40+ houses (too fragile) |
+
+> **India high-frequency macro** (GST/PMI/auto/e-way/power) was probed and **dropped** —
+> PMI is paywalled (S&P), GST `data.gov.in` API 500s, MOSPI API down; only press-release/PDF
+> remains. The clean macro path is the expanded FRED India series above.
 
 ### Tier 3 — aggregator-dependent (⚠️ ToS-sensitive)
 
