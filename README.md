@@ -176,9 +176,17 @@ py -3.14 market\fetch_fo_ban.py                # F&O ban — run daily
 - Brokerage research reports, credit-rating actions (CRISIL/ICRA/CARE)
 - Concall transcripts / investor presentations (NLP), NSDL/CDSL fortnightly FPI sector flows, index reconstitution events.
 
-### Cross-asset add-ons (trivial via yfinance/FRED)
+### Extras built (derived / reference data)
 
-DXY, MOVE index, Baltic Dry Index, BTC/ETH, MCX commodities (gold/silver/crude/copper/natgas).
+| Dataset | Script → table | Notes |
+|---|---|---|
+| Index constituents + sector | `registry/fetch_index_constituents.py` → `index_constituents` | 21 NIFTY indices, 507 stocks + NSE Industry/sector classification |
+| Options PCR / OI analytics | `market/compute_options_analytics.py` → `options_pcr_daily` | daily Put-Call ratio + OI/vol per symbol, 2005→2026 (computed from `fo_data`) |
+
+### Cross-asset — already covered in `global_indices_daily`
+
+DXY, USDINR/USDJPY/EURUSD/GBPUSD, Gold/Silver/Copper, WTI/Brent/NatGas, Bitcoin,
+VIX, India VIX, US 2/10/30Y, + global indices (35 symbols, 2000→2026).
 
 ## Notes
 
