@@ -126,6 +126,8 @@ DAILY_PHASES = [
     ("mf_nav",      "funds/update_mf_nav.py",                  "MF NAVs",                               None, 600),
     ("announce",    "events/phase4_corporate_announcements.py","Corporate Announcements",               None, 180),
     ("insider",     "events/insider_trading_fetch.py",         "Insider Trading (SEBI)",                None, 180),
+    ("news",        "events/fetch_news.py",                    "Market news headlines (RSS)",           None, 120),
+    ("ipo",         "events/fetch_ipo.py",                     "IPO GMP / subscription / listing",      None, 120),
     ("greeks",      "market/phase2_greeks_calculator.py",      "Greeks + GEX (incremental)",            ["--daily"], 600),
     ("trends",      "trends/fetch_trends.py",                  "Google Trends",                         ["--quiet"], 300),
 ]
