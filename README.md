@@ -99,6 +99,46 @@ py -3.14 common\export_parquet.py
 > All backfills are idempotent (`INSERT OR REPLACE`); re-running is safe. The F&O job
 > is the long pole (~5,600 trading days off the NSE archive, ~2-3 hrs end to end).
 
+## Data expansion roadmap (Tier 1 → 2 → 3)
+
+Additional datasets to extend coverage, by priority. "Backfillable" = deep history
+available; "forward" = source serves current day only, so it accumulates over time.
+
+### Tier 1 — official / free, in progress
+
+| Dataset | Script → table | Source | History |
+|---------|----------------|--------|---------|
+| Market breadth (adv/dec, 52w H/L, % >50/200 DMA) | `market/compute_market_breadth.py` → `market_breadth` | computed from `stock_data` | ✅ backfillable (2005→) |
+| Index PE / PB / Div-Yield | `market/fetch_index_valuation.py` → `index_valuation` | niftyindices.com | ✅ backfillable (2005→) |
+| Bulk / Block / Short deals | `market/fetch_deals.py` → `bulk_deals` / `block_deals` / `short_deals` | NSE `snapshot-capital-market-largedeal` | ⏩ forward (run daily) |
+| F&O ban list | `market/fetch_fo_ban.py` → `fo_ban` | NSE `fo_secban.csv` | ⏩ forward (run daily) |
+| ETF NAV / premium-discount | — | (ETFs mixed into EQ series; needs AMC NAV) | ⏸ deferred |
+
+```powershell
+py -3.14 market\compute_market_breadth.py     # breadth (full history)
+py -3.14 market\fetch_index_valuation.py       # PE/PB/DivYield (full history)
+py -3.14 market\fetch_deals.py                 # bulk/block/short — run daily
+py -3.14 market\fetch_fo_ban.py                # F&O ban — run daily
+```
+
+### Tier 2 — official / free, planned
+
+- **AMFI monthly flows** — AUM, SIP inflows, folio counts (amfiindia.com); the domestic counterweight to FII/DII.
+- **MF portfolio holdings** (monthly disclosure) — institutional positioning per stock.
+- **India high-frequency macro** — GST collections, PMI (mfg/services), FADA auto sales, e-way bills, power demand (Grid-India), RBI weekly (forex reserves, credit/deposit), monthly trade.
+- **IPO data** — GMP, subscription, listing gains (mainboard + SME), IPO calendar.
+- **News headlines (RSS)** — Pulse/ET/Moneycontrol/NSE feeds for per-stock NLP sentiment.
+
+### Tier 3 — aggregator-dependent (⚠️ ToS-sensitive)
+
+- Analyst estimates / consensus target prices / rating changes (Trendlyne, Tickertape)
+- Brokerage research reports, credit-rating actions (CRISIL/ICRA/CARE)
+- Concall transcripts / investor presentations (NLP), NSDL/CDSL fortnightly FPI sector flows, index reconstitution events.
+
+### Cross-asset add-ons (trivial via yfinance/FRED)
+
+DXY, MOVE index, Baltic Dry Index, BTC/ETH, MCX commodities (gold/silver/crude/copper/natgas).
+
 ## Notes
 
 - `run_pipeline.py` keeps daily resume state in `data_extraction\pipeline_state.json`.
