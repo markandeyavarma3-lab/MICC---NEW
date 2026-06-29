@@ -95,8 +95,13 @@ def get_underlying_close(conn, date_str, symbol):
     return row[0] if row else None
 
 def get_days_to_expiry(expiry_str, date_str):
-    dt = datetime.strptime(date_str, "%Y-%m-%d")
-    exp = datetime.strptime(expiry_str, "%Y-%m-%d")
+    if not expiry_str or not str(expiry_str).strip():
+        return None
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        exp = datetime.strptime(str(expiry_str).strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
     return max((exp - dt).days / 365.0, 0.0001)
 
 def fetch_options_for_date(conn, date_str):
@@ -131,6 +136,8 @@ def compute_greeks_for_date(conn, date_str):
         if underlying is None:
             continue
         T = get_days_to_expiry(expiry, date_str)
+        if T is None:   # skip contracts with missing/invalid expiry
+            continue
         iv = 0.20  # placeholder – later compute real IV
         greeks = black_scholes_greeks(underlying, strike, T, RISK_FREE_RATE, DIVIDEND_YIELD, iv, opt_type)
         rows.append((
