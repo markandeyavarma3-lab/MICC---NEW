@@ -50,7 +50,7 @@ def conn():
     c = sqlite3.connect(DB_PATH, timeout=60)
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA synchronous=NORMAL")
-    c.execute("PRAGMA busy_timeout=30000")
+    c.execute("PRAGMA busy_timeout=180000")
     return c
 
 def log(msg, level="INFO"):

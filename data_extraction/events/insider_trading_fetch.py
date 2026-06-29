@@ -9,8 +9,11 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import logging
 
+import time
+
 import pandas as pd
-import nsefin
+import requests
+import nsefin  # kept for import-compat; insider fetch now uses the NSE API directly
 
 # --- SSL fix (removes broken env variable) ---
 import os, certifi
@@ -64,16 +67,50 @@ def safe_float(x):
     except:
         return 0.0
 
+def _pit_session():
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-insider-trading",
+    })
+    try:
+        s.get("https://www.nseindia.com", timeout=12)
+    except Exception:
+        pass
+    return s
+
+
+def _fetch_pit(from_date_str, to_date_str):
+    """Direct NSE corporates-pit fetch in monthly windows (nsefin returns nothing)."""
+    s = _pit_session()
+    start = pd.to_datetime(from_date_str).date()
+    end = pd.to_datetime(to_date_str).date()
+    all_rows, cur = [], start
+    while cur <= end:
+        nxt = min((pd.Timestamp(cur) + pd.offsets.MonthEnd(1)).date(), end)
+        u = ("https://www.nseindia.com/api/corporates-pit?index=equities"
+             f"&from_date={cur.strftime('%d-%m-%Y')}&to_date={nxt.strftime('%d-%m-%Y')}")
+        try:
+            data = s.get(u, timeout=30).json().get("data", [])
+            all_rows.extend(data)
+            log.info(f"  PIT {cur} .. {nxt}: {len(data)} records")
+        except Exception as e:
+            log.warning(f"  PIT {cur}..{nxt} error: {e}")
+        time.sleep(0.7)
+        cur = (pd.Timestamp(nxt) + pd.Timedelta(days=1)).date()
+    return pd.DataFrame(all_rows)
+
+
 def fetch_and_store(conn, from_date_str, to_date_str):
     """
-    Fetch insider trades for a date range using nsefin.
+    Fetch insider trades for a date range from the NSE corporates-pit API.
     Dates: 'yyyy-mm-dd' format.
     """
     try:
         log.info(f"Fetching insider trades from {from_date_str} to {to_date_str}")
 
-        nse = nsefin.NSEClient()
-        df = nse.get_insider_trading()
+        df = _fetch_pit(from_date_str, to_date_str)
 
         if df is None or df.empty:
             log.warning("No insider trading data returned.")
@@ -195,7 +232,8 @@ if __name__ == "__main__":
     parser.add_argument("--to-date", help="End date (YYYY-MM-DD)")
     args = parser.parse_args()
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=180)
+    conn.execute("PRAGMA busy_timeout=180000")
     create_table(conn)
 
     if args.backfill:
