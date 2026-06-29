@@ -312,7 +312,9 @@ def parse_fo_zip(zip_bytes: bytes, trade_date: date):
     for col in ["strike", "open", "high", "low", "close", "settle_pr", "val_inlakh"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     for col in ["contracts", "open_int", "chg_in_oi"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+        # .round() first: some F&O records carry fractional values that can't
+        # safely cast straight to Int64 (raises "cannot safely cast float64 to int64")
+        df[col] = pd.to_numeric(df[col], errors="coerce").round().astype("Int64")
 
     # Drop empty symbol rows
     df = df[df["symbol"].str.len() > 0].copy()
