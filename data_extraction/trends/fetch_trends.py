@@ -81,28 +81,33 @@ TIMEFRAME = "all" if "--full" in _sys.argv else "today 12-m"  # --full => 2004-p
 
 
 def fetch_batch(pytrends_obj, batch, c):
-    """Fetch one batch of up to 5 queries."""
+    """Fetch one batch of up to 5 queries, with retry/backoff (Google 429s hard
+    on long-range queries)."""
     terms = [q[0] for q in batch]
     inserted = 0
-    try:
-        pytrends_obj.build_payload(terms, cat=0, timeframe=TIMEFRAME, geo="IN")
-        df = pytrends_obj.interest_over_time()
-        if df.empty:
-            return 0
-        for term, symbol, category in batch:
-            if term not in df.columns:
+    for attempt in range(4):
+        try:
+            pytrends_obj.build_payload(terms, cat=0, timeframe=TIMEFRAME, geo="IN")
+            df = pytrends_obj.interest_over_time()
+            if df.empty:
+                time.sleep(20 * (attempt + 1))
                 continue
-            for dt, val in df[term].items():
-                c.execute("""
-                    INSERT OR REPLACE INTO google_trends
-                    (query,symbol,date,interest_score,category,geo,last_updated)
-                    VALUES (?,?,?,?,?,?,?)
-                """, (term, symbol, dt.strftime("%Y-%m-%d"),
-                      int(val), category, "IN", NOW))
-                inserted += 1
-        c.commit()
-    except Exception as e:
-        print(f"    batch error: {e}")
+            for term, symbol, category in batch:
+                if term not in df.columns:
+                    continue
+                for dt, val in df[term].items():
+                    c.execute("""
+                        INSERT OR REPLACE INTO google_trends
+                        (query,symbol,date,interest_score,category,geo,last_updated)
+                        VALUES (?,?,?,?,?,?,?)
+                    """, (term, symbol, dt.strftime("%Y-%m-%d"),
+                          int(val), category, "IN", NOW))
+                    inserted += 1
+            c.commit()
+            return inserted
+        except Exception as e:
+            print(f"    batch error (attempt {attempt+1}): {str(e)[:80]}")
+            time.sleep(20 * (attempt + 1))
     return inserted
 
 def main():
@@ -129,7 +134,7 @@ def main():
         n = fetch_batch(pt, batch, c)
         total += n
         print(f"    → {n} data points")
-        time.sleep(4)  # pytrends rate limit
+        time.sleep(15)  # pytrends rate limit (long-range needs more)
 
     # Show latest scores
     rows = c.execute("""

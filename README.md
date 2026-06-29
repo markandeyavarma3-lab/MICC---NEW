@@ -61,50 +61,83 @@ py -3.14 data_extraction\market\fetch_nse_data.py --fii
 The live DB (`D:\marketDB\db\market.db`) has been deep-backfilled from the local
 archive (`data_storage/raw/bhavcopy`, offline, survivorship-free) and online sources.
 
-| Table | Rows | Range | Status |
-|-------|------|-------|--------|
-| `stock_data` (OHLCV)        | ~7.65M | 2005-01-03 → 2026 | ✅ complete (4,200 symbols) |
-| `stock_delivery`            | ~7.66M | 2005-01-03 → 2026 | ✅ complete (4,984 symbols) |
-| `indices_data` (NSE/BSE)    | ~88.6k | 1997-07 → 2026     | ✅ complete (20 indices; 4 CNX tickers unavailable on Yahoo) |
-| `global_indices_daily`      | ~212k  | 2000-01 → 2026     | ✅ complete (35 symbols) |
-| per-symbol parquet          | 37,667 files | 2005 → 2026 | ✅ complete (`D:\marketDB\stocks\all`) |
-| macro (FRED/WorldBank/RBI)  | —      | full history       | ✅ complete |
-| `fo_data` (F&O)             | ~10.1M | 2005 → **~2008**, + recent | 🟡 PARTIAL — stopped; gap ~2008→2026 |
-| quarterly fundamentals      | partial | —                 | 🟡 PARTIAL — stopped ~1,356/4,200 symbols |
-| `option_greeks_raw` / `gamma_exposure_daily` | recent only | 2026 | ⏸ pending (run after F&O) |
+Every dataset is backfilled to **the earliest its source provides**.
 
-### Backfill tooling (in `data_extraction/`)
+**Equity price / volume**
+| Table | Rows | Range | Notes |
+|---|---|---|---|
+| `stock_data` (OHLCV) | ~7.65M | 2005 → 2026 | 4,200 symbols (survivorship-free) |
+| `stock_delivery` | ~7.66M | 2005 → 2026 | 4,984 symbols |
+| `market_breadth` | 5,304 | 2005 → 2026 | adv/dec, 52w H/L, % >50/200-DMA |
+| per-symbol parquet | 37,667 files | 2005 → 2026 | `D:\marketDB\stocks\all` |
 
-- `market/backfill_stocks.py`  — local bhavcopy (legacy+secfull) → `stock_data`
-- `market/backfill_delivery.py` — local mto+secfull → `stock_delivery`
-- `market/backfill_indices_hist.py` — yfinance → `indices_data`
-- `market/backfill_fo_data.py`  — NSE archive (udiff + legacy) → `fo_data` (resumable: skips existing dates)
-- `market/phase9a_fetch_global_indices.py --full` — global history
-- `common/export_parquet.py`    — `stock_data` → per-symbol parquet
+**Indices**
+| Table | Rows | Range | Notes |
+|---|---|---|---|
+| `indices_data` (OHLC) | ~88.6k | 1997 → 2026 | 20 NSE/BSE indices |
+| `index_valuation` (PE/PB/DivYld) | ~92.9k | 2005 → 2026 | 21 indices (niftyindices) |
+| `global_indices_daily` | ~212k | 2000 → 2026 | 35 global symbols/commodities/FX |
 
-### Resume the backfill (tomorrow)
+**Derivatives**
+| Table | Rows | Range | Notes |
+|---|---|---|---|
+| `fo_data` (F&O) | ~69M | 2005 → 2026 | both legacy + udiff formats |
+| `option_greeks_raw` / `gamma_exposure_daily` | ~3.2M | 2007 → 2026 | NIFTY + BANKNIFTY |
+| `participant_oi` | ~15k | **2014** → 2026 | NSE disclosure floor |
 
-```powershell
-cd data_extraction
-# 1) Finish F&O (resumes automatically — skips dates already in fo_data)
-py -3.14 market\backfill_fo_data.py --from 2005-01-01
-# 2) Finish quarterly fundamentals (re-run; processes all parquet symbols)
-py -3.14 events\update_fundamentals.py
-# 3) Once fo_data is complete, backfill Greeks/GEX from it
-py -3.14 market\phase2_greeks_calculator.py --backfill
-# 4) Refresh per-symbol parquet after any stock_data change
-py -3.14 common\export_parquet.py
-```
+**Fundamentals & ownership**
+| Table | Rows | Range | Notes |
+|---|---|---|---|
+| `quarterly_income` / `quarterly_balance` | ~21k | — | ~2,340 symbols (yfinance) |
+| `quarterly_cashflow` | ~16.8k | **2002** → 2026 | 1,745 symbols (screener.in scraper) |
+| `shareholding_history` | ~10k | **2004** → 2026 | promoter/public % |
+| `corporate_announcements` | ~13.8k | — | 2,298 symbols |
+| `corporate_actions` | ~40.5k | **2005** → 2026 | div/bonus/split/rights classified |
+| `insider_trading` | ~280k | **2016** → 2026 | SEBI PIT floor (direct NSE API) |
 
-> All backfills are idempotent (`INSERT OR REPLACE`); re-running is safe. The F&O job
-> is the long pole (~5,600 trading days off the NSE archive, ~2-3 hrs end to end).
+**Flows / funds / macro / sentiment**
+| Table | Rows | Range | Notes |
+|---|---|---|---|
+| `mf_nav_history` | **~36.9M** | 2006 → 2026 | 37,977 schemes (bulk AMFI) |
+| `us_macro_data` (FRED) | ~58k | 1919 → 2026 | |
+| `rbi_monetary_data` / `world_bank_macro` / `india_bond_yields` | — | 1960/2000/2011 → 2026 | |
+| `bulk_deals` / `block_deals` / `short_deals` | today | forward-only | NSE serves no history |
+| `fii_dii_data`, `fo_ban`, `google_trends` | recent | forward / blocked | see "source limits" below |
+
+**Derived analytics** (`phase9b`): `symbol_technicals`, `symbol_seasonality`, `symbol_correlations`, `window_stats`, `window_extremes`, `window_regime_stats` — rebuilt across ~3,800 symbols.
+
+**Source limits (cannot go deeper — the data does not exist):** `insider_trading` only from 2016 (SEBI electronic PIT), `participant_oi` only from 2014 (NSE disclosure start), and `fii_dii_data` / bulk-block-short `deals` / `fo_ban` are **forward-only** (NSE/source serves the current day only).
+
+### Backfill / scraper tooling (in `data_extraction/`)
+
+All backfills are **idempotent** (`INSERT OR REPLACE`, skip-existing) and have a
+generous `busy_timeout` so several can run in parallel (keep it to ~4-5 at once —
+SQLite DDL thrashes beyond that).
+
+| Script | → table | Source |
+|---|---|---|
+| `market/backfill_stocks.py` | `stock_data` | local bhavcopy (legacy+secfull) |
+| `market/backfill_delivery.py` | `stock_delivery` | local mto+secfull |
+| `market/backfill_indices_hist.py` | `indices_data` | yfinance |
+| `market/backfill_fo_data.py --from 2005-01-01` | `fo_data` | NSE archive (udiff + legacy) |
+| `market/phase2_greeks_calculator.py --backfill --start 2005-01-01` | greeks/GEX | computed from `fo_data` |
+| `market/backfill_participant_oi.py` | `participant_oi` | NSE archive CSVs (2014+) |
+| `market/compute_market_breadth.py` | `market_breadth` | computed from `stock_data` |
+| `market/fetch_index_valuation.py` | `index_valuation` | niftyindices.com |
+| `market/fetch_deals.py` / `fetch_fo_ban.py` | deals / `fo_ban` | NSE (forward, run daily) |
+| `events/insider_trading_fetch.py --backfill --from-date 2016-01-01` | `insider_trading` | NSE corporates-pit API |
+| `events/backfill_corporate_actions.py --from 2005` | `corporate_actions` | NSE CA bulk API |
+| `events/scrape_cashflow.py` | `quarterly_cashflow` | screener.in |
+| `macro/fetch_phase1_data.py --bse` | `shareholding_history` | NSE corp-share-holdings |
+| `funds/backfill_mf_nav.py --from 2006` | `mf_nav_history` | bulk AMFI NAV history |
+| `common/export_parquet.py` | per-symbol parquet | `stock_data` |
 
 ## Data expansion roadmap (Tier 1 → 2 → 3)
 
 Additional datasets to extend coverage, by priority. "Backfillable" = deep history
 available; "forward" = source serves current day only, so it accumulates over time.
 
-### Tier 1 — official / free, in progress
+### Tier 1 — ✅ DONE (breadth + valuation backfilled; deals/ban live daily)
 
 | Dataset | Script → table | Source | History |
 |---------|----------------|--------|---------|
