@@ -117,6 +117,8 @@ DAILY_PHASES = [
     ("delivery",    "market/update_delivery.py",               "Delivery % (nselib)",                   None, 300),
     ("fii_dii",     "market/fetch_nse_data.py",                "FII/DII activity (direct NSE API)",     ["--fii"], 300),
     ("global_idx",  "market/phase9a_fetch_global_indices.py",  "Global indices (yfinance)",             None, 600),
+    ("deals",       "market/fetch_deals.py",                   "Bulk/Block/Short deals (snapshot)",     None, 180),
+    ("fo_ban",      "market/fetch_fo_ban.py",                  "F&O ban list",                          None, 120),
     ("us_macro",    "macro/update_macro_us.py",                "US Macro (FRED)",                       ["--daily"], 600),
     ("india_macro", "macro/update_macro_india_fred.py",        "FRED India Macro",                      ["--daily"], 300),
     ("world_bank",  "macro/update_world_bank_india.py",        "World Bank India Macro",                None, 180),
