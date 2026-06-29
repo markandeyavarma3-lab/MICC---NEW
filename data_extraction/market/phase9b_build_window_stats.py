@@ -1132,9 +1132,10 @@ def main():
         log("scipy missing — install: pip install scipy --break-system-packages", "FAIL")
         sys.exit(1)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=300)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=300000")
     conn.execute("PRAGMA cache_size=-262144")
     conn.execute("PRAGMA temp_store=MEMORY")
     conn.execute("PRAGMA mmap_size=4294967296")
