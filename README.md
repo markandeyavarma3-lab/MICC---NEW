@@ -182,6 +182,10 @@ py -3.14 market\fetch_fo_ban.py                # F&O ban — run daily
 |---|---|---|
 | Index constituents + sector | `registry/fetch_index_constituents.py` → `index_constituents` | 21 NIFTY indices, 507 stocks + NSE Industry/sector classification |
 | Options PCR / OI analytics | `market/compute_options_analytics.py` → `options_pcr_daily` | daily Put-Call ratio + OI/vol per symbol, 2005→2026 (computed from `fo_data`) |
+| Options max-pain | `market/compute_max_pain.py` → `options_max_pain` | NIFTY/BANKNIFTY/FINNIFTY front-expiry max-pain strike, 2005→2026 |
+| Annual financials | `events/fetch_annual_financials.py` → `annual_income`/`annual_balance`/`annual_cashflow` | yfinance, complements quarterly_* |
+| MF scheme master | `funds/fetch_mf_scheme_master.py` → `mf_scheme_master` | 14,208 schemes → AMC + category (AMFI NAVAll) |
+| Earnings calendar | `events/fetch_earnings_calendar.py` → `board_meetings` / `financial_results` | upcoming results/dividend dates + filed results |
 
 ### Cross-asset — already covered in `global_indices_daily`
 

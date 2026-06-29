@@ -128,6 +128,7 @@ DAILY_PHASES = [
     ("insider",     "events/insider_trading_fetch.py",         "Insider Trading (SEBI)",                None, 180),
     ("news",        "events/fetch_news.py",                    "Market news headlines (RSS)",           None, 120),
     ("ipo",         "events/fetch_ipo.py",                     "IPO GMP / subscription / listing",      None, 120),
+    ("earnings",    "events/fetch_earnings_calendar.py",       "Board meetings + results calendar",     None, 120),
     ("greeks",      "market/phase2_greeks_calculator.py",      "Greeks + GEX (incremental)",            ["--daily"], 600),
     ("trends",      "trends/fetch_trends.py",                  "Google Trends",                         ["--quiet"], 300),
 ]
@@ -140,6 +141,9 @@ WEEKLY_PHASES = [
     ("amfi_flows",     "funds/backfill_amfi_industry.py",      "AMFI MF industry monthly flows",        None, 600),
     ("index_members",  "registry/fetch_index_constituents.py", "Index constituents + sector",           None, 300),
     ("pcr",            "market/compute_options_analytics.py",  "Options PCR / OI analytics (from fo_data)", None, 900),
+    ("max_pain",       "market/compute_max_pain.py",           "Index options max-pain (from fo_data)", None, 600),
+    ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
+    ("annual_fin",     "events/fetch_annual_financials.py",    "Annual financials (yfinance)",          None, 7200),
 ]
 
 
