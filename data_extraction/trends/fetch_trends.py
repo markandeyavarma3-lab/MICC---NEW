@@ -76,12 +76,16 @@ QUERIES = [
     ("SIP mutual fund India",  None,         "mf"),
 ]
 
+import sys as _sys
+TIMEFRAME = "all" if "--full" in _sys.argv else "today 12-m"  # --full => 2004-present
+
+
 def fetch_batch(pytrends_obj, batch, c):
     """Fetch one batch of up to 5 queries."""
     terms = [q[0] for q in batch]
     inserted = 0
     try:
-        pytrends_obj.build_payload(terms, cat=0, timeframe="today 12-m", geo="IN")
+        pytrends_obj.build_payload(terms, cat=0, timeframe=TIMEFRAME, geo="IN")
         df = pytrends_obj.interest_over_time()
         if df.empty:
             return 0
