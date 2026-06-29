@@ -101,12 +101,13 @@ Every dataset is backfilled to **the earliest its source provides**.
 | `mf_nav_history` | **~36.9M** | 2006 → 2026 | 37,977 schemes (bulk AMFI) |
 | `us_macro_data` (FRED) | ~58k | 1919 → 2026 | |
 | `rbi_monetary_data` / `world_bank_macro` / `india_bond_yields` | — | 1960/2000/2011 → 2026 | |
-| `bulk_deals` / `block_deals` / `short_deals` | today | forward-only | NSE serves no history |
+| `bulk_deals` / `block_deals` | ~150k+ | **2006** → 2026 | NSE historicalOR `&csv=true` (uncapped) |
+| `short_deals` | — | **2018** → 2026 | NSE short-selling history |
 | `fii_dii_data`, `fo_ban`, `google_trends` | recent | forward / blocked | see "source limits" below |
 
 **Derived analytics** (`phase9b`): `symbol_technicals`, `symbol_seasonality`, `symbol_correlations`, `window_stats`, `window_extremes`, `window_regime_stats` — rebuilt across ~3,800 symbols.
 
-**Source limits (cannot go deeper — the data does not exist):** `insider_trading` only from 2016 (SEBI electronic PIT), `participant_oi` only from 2014 (NSE disclosure start), and `fii_dii_data` / bulk-block-short `deals` / `fo_ban` are **forward-only** (NSE/source serves the current day only).
+**Source limits (cannot go deeper — the data does not exist):** `insider_trading` only from 2016 (SEBI electronic PIT), `participant_oi` only from 2014 (NSE disclosure start), `short_deals` only from 2018. Genuinely **forward-only** (no history at source): `fii_dii_data`, `fo_ban`, and `google_trends` (Google blocks long-range queries). `fetch_deals` + `fetch_fo_ban` are wired into `run_pipeline.py` so they accumulate daily.
 
 ### Backfill / scraper tooling (in `data_extraction/`)
 
@@ -124,7 +125,8 @@ SQLite DDL thrashes beyond that).
 | `market/backfill_participant_oi.py` | `participant_oi` | NSE archive CSVs (2014+) |
 | `market/compute_market_breadth.py` | `market_breadth` | computed from `stock_data` |
 | `market/fetch_index_valuation.py` | `index_valuation` | niftyindices.com |
-| `market/fetch_deals.py` / `fetch_fo_ban.py` | deals / `fo_ban` | NSE (forward, run daily) |
+| `market/backfill_deals.py` | `bulk_deals`/`block_deals`/`short_deals` | NSE historicalOR `&csv=true` (2006+/2018+) |
+| `market/fetch_deals.py` / `fetch_fo_ban.py` | deals / `fo_ban` | NSE daily snapshot (wired into run_pipeline) |
 | `events/insider_trading_fetch.py --backfill --from-date 2016-01-01` | `insider_trading` | NSE corporates-pit API |
 | `events/backfill_corporate_actions.py --from 2005` | `corporate_actions` | NSE CA bulk API |
 | `events/scrape_cashflow.py` | `quarterly_cashflow` | screener.in |
