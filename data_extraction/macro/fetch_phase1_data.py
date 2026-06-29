@@ -430,7 +430,7 @@ def fetch_shareholding(symbols=None):
 
     for i, symbol in enumerate(symbols):
         try:
-            url = f"https://www.nseindia.com/api/corporate-share-holdings-master?symbol={symbol}"
+            url = f"https://www.nseindia.com/api/corporate-share-holdings-master?index=equities&symbol={symbol}"
             resp = session.get(url, timeout=10)
 
             if resp.status_code == 403:
@@ -471,13 +471,13 @@ def fetch_shareholding(symbols=None):
                             except: pass
                     return None
 
-                promoter = gf(["promoterAndPromoterGroupShareHolding",
-                               "promoter_pct", "Promoter"])
-                fii      = gf(["fiisShareHolding","fii_pct","FIIHolding","FII"])
-                dii      = gf(["diisShareHolding","dii_pct","DIIHolding","DII"])
-                public   = gf(["publicShareHolding","public_pct","Public"])
-                pledge   = gf(["promoterAndPromoterGroupPledgedShares",
-                               "pledge_pct","PledgeShares"])
+                # NSE corporate-share-holdings-master summary fields: pr_and_prgrp / public_val.
+                # FII/DII/pledge are only in the per-filing XBRL (not this summary), so stay None.
+                promoter = gf(["pr_and_prgrp", "promoterAndPromoterGroupShareHolding", "promoter_pct"])
+                fii      = gf(["fiisShareHolding", "fii_pct", "FII"])
+                dii      = gf(["diisShareHolding", "dii_pct", "DII"])
+                public   = gf(["public_val", "publicShareHolding", "public_pct"])
+                pledge   = gf(["promoterAndPromoterGroupPledgedShares", "pledge_pct"])
 
                 c.execute("""
                     INSERT OR REPLACE INTO shareholding_history
