@@ -257,6 +257,27 @@ def main():
         print("  (P7 idea-engine tests skipped -- thesis/trade not built yet [Stage 2])",
               flush=True)
 
+    # ============ PHASE 8: ATR band invariants (Part 1 Stage 3) ============
+    bands = conn.execute(
+        "SELECT t.entry_price,t.stop,t.target,t.size_shares,t.atr_k "
+        "FROM trade t JOIN thesis h ON t.thesis_id=h.thesis_id "
+        "WHERE h.narrative='live:momentum_bands' AND t.size_shares IS NOT NULL").fetchall()
+    if bands:
+        print("Verifying Phase 8: ATR band invariants ...", flush=True)
+        ok_order = all(s < e < tg for e, s, tg, _, _ in bands)
+        check(ok_order, "P8 bands: stop < entry < target for all", f"n={len(bands)}")
+        check(all(sz >= 1 for _, _, _, sz, _ in bands), "P8 bands: size_shares >= 1")
+        # reward:risk consistent (target-entry == R*(entry-stop), R=2)
+        rr = [ (tg - e) / (e - s) for e, s, tg, _, _ in bands if e - s > 0 ]
+        check(all(abs(x - 2.0) < 0.05 for x in rr), "P8 bands: reward:risk ~ 2:1",
+              f"min={min(rr):.2f} max={max(rr):.2f}")
+        # equal rupee-risk: size*(entry-stop) within one share-of-risk of the budget
+        risk = [ sz * (e - s) for e, s, tg, sz, _ in bands ]
+        spread = (max(risk) - min(risk))
+        check(spread < max(e - s for e, s, tg, sz, _ in bands) + 1,
+              "P8 bands: equal rupee-risk sizing", f"risk spread={spread:.0f}")
+        check(all(k is not None for *_, k in bands), "P8 bands: atr_k persisted per trade")
+
     conn.close()
 
     # ============ REPORT ============
