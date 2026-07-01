@@ -103,6 +103,13 @@ def main():
                            "AVG(realized_return) FROM recommendations WHERE status='CLOSED'").fetchone()
     except Exception:
         recs, rtr = pd.DataFrame(), (0, 0, 0)
+    try:
+        ideas = pd.read_sql("SELECT symbol,company,sector,timeframe_class,entry,stop,target,"
+                            "rr_ratio,size_shares,confidence_score,pillar_json FROM idea_card "
+                            "WHERE card_date=(SELECT MAX(card_date) FROM idea_card) "
+                            "ORDER BY confidence_score DESC LIMIT 15", conn)
+    except Exception:
+        ideas = pd.DataFrame()
     bdate, votes, score = regime(conn)
     conn.close()
 
@@ -181,6 +188,27 @@ def main():
     rec_card = (f'{card("Track record", f"{rtr[1]*100:.0f}%", f"hit rate · {rtr[0]} closed")}'
                 f'{card("Avg / call", f"{rtr[2]*100:+.2f}%", "1-month horizon")}') if rtr and rtr[0] else ""
 
+    if len(ideas):
+        import json as _json
+
+        def _why(pj):
+            try:
+                d = _json.loads(pj)
+                top = sorted(d.items(), key=lambda kv: -kv[1]["contribution"])[:2]
+                return ", ".join(f'{k.split("_")[0]} {v["contribution"]:+.0f}' for k, v in top)
+            except Exception:
+                return ""
+        ideas["why"] = ideas["pillar_json"].map(_why)
+        idd = ideas[["symbol", "timeframe_class", "entry", "stop", "target", "rr_ratio",
+                     "size_shares", "confidence_score", "why"]].copy()
+        idd.columns = ["Symbol", "Frame", "Entry", "Stop", "Target", "R:R", "Size", "Conf", "Why (top pillars)"]
+        idea_tbl = table(idd, {
+            "Entry": lambda x: f"₹{x:,.0f}", "Stop": lambda x: f"₹{x:,.0f}",
+            "Target": lambda x: f"₹{x:,.0f}", "R:R": lambda x: f"{x:.1f}",
+            "Size": lambda x: f"{int(x)}", "Conf": lambda x: f"{x:.0f}"})
+    else:
+        idea_tbl = "<p>Run <code>ideas/build_idea_cards.py</code> to populate.</p>"
+
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>MICC Dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -207,9 +235,12 @@ td{{padding:8px;border-bottom:1px solid #131c2e}} tr:hover td{{background:#0f172
 .foot{{color:#475569;font-size:11px;margin-top:30px;text-align:center}}
 code{{background:#1e293b;padding:2px 6px;border-radius:4px}}
 .tag{{font-size:11px;color:#a5b4fc;background:#1e1b4b;padding:2px 8px;border-radius:5px;white-space:nowrap}}
+.banner{{background:#2a1e05;border:1px solid #78350f;color:#fbbf24;font-size:12px;
+padding:10px 14px;border-radius:8px;margin:0 0 18px}}
 </style></head><body><div class="wrap">
 <h1>MICC — Indian Equity Quant Dashboard</h1>
 <div class="sub">Survivorship-free · corp-action-adjusted · point-in-time · {asof} · research only, not advice</div>
+<div class="banner">⚠ Dashboard polish ≠ validated edge. Only the momentum strategy is out-of-sample proven (Sharpe {m['sharpe']:.2f}). Idea-card <b>confidence is a transparent heuristic composite</b> (see per-pillar breakdown), not a return forecast; value/quality ideas are capped until fundamentals depth improves.</div>
 
 <h2>Market Regime</h2>
 <div class="regime">
@@ -236,6 +267,10 @@ code{{background:#1e293b;padding:2px 6px;border-radius:4px}}
 <div class="cards">{rec_card}</div>
 <div style="margin-top:12px">{rec_tbl}</div>
 <div style="color:#64748b;font-size:11px;margin-top:6px">Calls are logged, then scored after their duration vs the real price path → the feedback loop that improves the model. Research only, not advice.</div>
+
+<h2>Idea Cards — ATR bands · auto timeframe · 6-pillar confidence</h2>
+{idea_tbl}
+<div style="color:#64748b;font-size:11px;margin-top:6px">Entry/stop/target from ATR-14 (swing 1.75× · positional 2.75×), equal rupee-risk sizing. Confidence = transparent linear composite of 6 pillars; "Why" shows the two largest contributions. Full audit via <code>/api/thesis/&lt;id&gt;</code>.</div>
 
 <h2>Today's Top-Decile Portfolio {'(held as CASH — regime risk-off)' if not risk_on else ''}</h2>
 {sig_tbl}
