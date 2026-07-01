@@ -230,6 +230,12 @@ def main():
             match = len(cur & snap) / len(snap)
             check(match >= 0.99, "P6 NIFTY 50 current membership matches snapshot",
                   f"match={match:.1%} n={len(snap)}")
+        # sector coverage of the tradable universe: no NULL inside current top-500
+        d_pu = q("SELECT MAX(rebal_date) FROM pit_universe")[0]
+        sec_gap = q("SELECT COUNT(*) FROM pit_universe p LEFT JOIN dim_sector s "
+                    "ON p.symbol=s.symbol WHERE p.rebal_date=? AND p.top500=1 "
+                    "AND s.symbol IS NULL", (d_pu,))[0]
+        check(sec_gap == 0, "P6 no NULL sector inside current top-500", f"gap={sec_gap}")
     else:
         print("  (P6 membership tests skipped -- index_membership not built yet [Stage 1A])",
               flush=True)
