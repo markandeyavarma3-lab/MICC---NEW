@@ -188,6 +188,75 @@ def main():
     fin = q("SELECT equity FROM bt_equity WHERE strategy='LO + Regime gate' ORDER BY date DESC LIMIT 1")
     check(fin and fin[0] > 5, "P45 gated final equity > 5x", f"final={fin[0]:.2f}" if fin else "none")
 
+    # ============ PHASE 6: PIT as-of integrity (Part 1 Stage 1C) ============
+    print("Verifying Phase 6: PIT as-of integrity ...", flush=True)
+    # 6.1 fundamentals_pit: a result cannot be KNOWN before it is filed -> pit_date >= report_date
+    if "fundamentals_pit" in tables:
+        neg = q("SELECT COUNT(*) FROM fundamentals_pit "
+                "WHERE pit_date IS NOT NULL AND report_date IS NOT NULL "
+                "AND pit_date < report_date")[0]
+        check(neg == 0, "P6 fundamentals pit_date >= report_date (no negative filing lag)",
+              f"violations={neg}")
+        badd = q("SELECT COUNT(*) FROM fundamentals_pit WHERE pit_date IS NOT NULL "
+                 "AND (LENGTH(pit_date)!=10 OR pit_date NOT LIKE '____-__-__')")[0]
+        check(badd == 0, "P6 fundamentals_pit pit_date clean ISO", f"bad={badd}")
+        lags = pd.read_sql("SELECT report_date,pit_date FROM fundamentals_pit "
+                           "WHERE pit_date IS NOT NULL AND report_date IS NOT NULL "
+                           "AND dated_by='filing'", conn)
+        if len(lags):
+            lags["lag"] = (pd.to_datetime(lags["pit_date"]) -
+                           pd.to_datetime(lags["report_date"])).dt.days
+            med = lags["lag"].median()
+            check(0 <= med < 200, "P6 median filing lag plausible (0..200d)",
+                  f"median={med:.0f}d n={len(lags):,}")
+    else:
+        check(False, "P6 fundamentals_pit exists")
+
+    # 6.2 named index membership -- integrity checks activate once Stage 1A builds the table
+    if "index_membership" in tables:
+        ov = q("SELECT COUNT(*) FROM index_membership a JOIN index_membership b "
+               "ON a.index_name=b.index_name AND a.symbol=b.symbol "
+               "AND a.effective_from < b.effective_from "
+               "AND (a.effective_to IS NULL OR a.effective_to > b.effective_from)")[0]
+        check(ov == 0, "P6 index_membership: no overlapping intervals", f"overlaps={ov}")
+        badiv = q("SELECT COUNT(*) FROM index_membership "
+                  "WHERE effective_to IS NOT NULL AND effective_to < effective_from")[0]
+        check(badiv == 0, "P6 index_membership: effective_to >= effective_from", f"bad={badiv}")
+        cur = {r[0] for r in conn.execute("SELECT symbol FROM index_membership "
+               "WHERE index_name='NIFTY 50' AND effective_to IS NULL")}
+        snap = {r[0] for r in conn.execute("SELECT symbol FROM index_constituents "
+                "WHERE index_name='NIFTY 50'")}
+        if snap:
+            match = len(cur & snap) / len(snap)
+            check(match >= 0.99, "P6 NIFTY 50 current membership matches snapshot",
+                  f"match={match:.1%} n={len(snap)}")
+    else:
+        print("  (P6 membership tests skipped -- index_membership not built yet [Stage 1A])",
+              flush=True)
+
+    # 6.3 idea-engine backfill parity -- activates once Stage 2 builds thesis/trade
+    if "thesis" in tables and "trade" in tables:
+        nth = q("SELECT COUNT(*) FROM thesis")[0]
+        nrec = q("SELECT COUNT(*) FROM recommendations")[0]
+        check(nth >= nrec, "P7 thesis count >= recommendations (backfill complete)",
+              f"thesis={nth} recs={nrec}")
+        orphan = q("SELECT COUNT(*) FROM trade t LEFT JOIN thesis h "
+                   "ON t.thesis_id=h.thesis_id WHERE h.thesis_id IS NULL")[0]
+        check(orphan == 0, "P7 no orphan trades (every trade.thesis_id resolves)",
+              f"orphans={orphan}")
+        # backfill parity: mean realized_return of backfilled closed trades == recommendations
+        rec_mean = q("SELECT AVG(realized_return) FROM recommendations "
+                     "WHERE status='CLOSED' AND realized_return IS NOT NULL")[0]
+        trd_mean = q("SELECT AVG(realized_return) FROM trade "
+                     "WHERE exit_price IS NOT NULL AND realized_return IS NOT NULL")[0]
+        if rec_mean is not None and trd_mean is not None:
+            check(abs(rec_mean - trd_mean) < 1e-6,
+                  "P7 backfill parity: trade mean return == recommendations",
+                  f"rec={rec_mean:.6f} trade={trd_mean:.6f}")
+    else:
+        print("  (P7 idea-engine tests skipped -- thesis/trade not built yet [Stage 2])",
+              flush=True)
+
     conn.close()
 
     # ============ REPORT ============
