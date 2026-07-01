@@ -278,6 +278,49 @@ def main():
               "P8 bands: equal rupee-risk sizing", f"risk spread={spread:.0f}")
         check(all(k is not None for *_, k in bands), "P8 bands: atr_k persisted per trade")
 
+    # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
+    if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
+        print("Verifying Phase 9: scoring framework ...", flush=True)
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ideas"))
+        import scoring as SC
+        w = SC.load_weights(conn)
+        pos = sum(v for k, v in w.items() if v > 0)
+        check(abs(pos - 1.0) < 1e-9, "P9 positive pillar weights sum to 1.0", f"sum={pos:.4f}")
+        check(w["risk_penalty"] <= 0, "P9 risk_penalty weight <= 0", f"w={w['risk_penalty']}")
+        scored = conn.execute(
+            "SELECT thesis_id,symbol,thesis_type,confidence_score,created_at FROM thesis "
+            "WHERE weight_version IS NOT NULL AND narrative='live:momentum_bands'").fetchall()
+        bad = 0
+        for tid, sym, ttype, stored, cd in scored:
+            raw = conn.execute("SELECT SUM(contribution) FROM score_audit "
+                               "WHERE thesis_id=? AND card_date=?", (tid, cd)).fetchone()[0]
+            rec = SC.apply_fundamentals_cap(ttype, SC.annual_years(conn, sym), SC.clamp(raw))
+            if abs(round(rec, 2) - stored) > 0.01:
+                bad += 1
+        check(bad == 0, "P9 every confidence reproducible from score_audit",
+              f"{len(scored)-bad}/{len(scored)}")
+        demo = conn.execute("SELECT symbol FROM annual_income GROUP BY symbol "
+                            "HAVING COUNT(DISTINCT substr(report_date,1,4))<8 LIMIT 1").fetchone()[0]
+        check(SC.apply_fundamentals_cap("value", SC.annual_years(conn, demo), 95.0) <= SC.FUND_CAP,
+              "P9 A3 value cap binds at <8yr coverage", f"demo={demo}")
+        # degenerate weights (signal_strength=1) must reproduce generate_signals ranking
+        cd = conn.execute("SELECT MAX(rebal_date) FROM current_signals").fetchone()[0]
+        syms = [s for s, in conn.execute("SELECT symbol FROM thesis "
+                "WHERE narrative='live:momentum_bands' AND created_at=?", (cd,))]
+        if syms:
+            subs = SC.compute_subscores(conn, cd, syms)
+            degen = {p: (1.0 if p == "signal_strength" else 0.0) for p in SC.PILLARS}
+            comp = {s: SC.composite(subs[s], degen) for s in syms}
+            gs = {s: sc for s, sc in conn.execute(
+                "SELECT symbol,score FROM current_signals WHERE rebal_date=?", (cd,))}
+            oc = sorted(syms, key=lambda x: -comp[x])
+            og = sorted(syms, key=lambda x: -gs.get(x, 0))
+            check(oc == og, "P9 degenerate weights reproduce generate_signals ranking",
+                  f"n={len(syms)}")
+    else:
+        print("  (P9 scoring tests skipped -- score_weights not seeded yet [Stage 4])", flush=True)
+
     conn.close()
 
     # ============ REPORT ============
