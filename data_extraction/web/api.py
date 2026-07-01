@@ -14,6 +14,8 @@ Endpoints:
   /api/funds                top equity funds (MF scorecard)
   /api/deals                insider/bulk smart-money intel
   /api/fno                  F&O positioning intel
+  /api/ideas                live Idea-Engine cards (entry/stop/target + confidence)
+  /api/thesis/{id}          one thesis: card, trades, per-pillar score audit
   /api/asset/{symbol}       single-asset profile (features, sector, signal)
 """
 import re
@@ -35,7 +37,8 @@ def handle(path):
         if path in ("/api", "/api/"):
             return 200, {"service": "MICC API", "endpoints": [
                 "/api/regime", "/api/strategies", "/api/signals", "/api/recommendations",
-                "/api/paper", "/api/funds", "/api/deals", "/api/fno", "/api/asset/{symbol}"]}
+                "/api/paper", "/api/funds", "/api/deals", "/api/fno", "/api/ideas",
+                "/api/thesis/{id}", "/api/asset/{symbol}"]}
 
         if path == "/api/regime":
             br = c.execute("SELECT date,pct_above_200dma,pct_above_50dma FROM market_breadth "
@@ -77,6 +80,29 @@ def handle(path):
             return 200, _rows(c, "SELECT category,symbol,detail,value FROM deals_intel")
         if path == "/api/fno":
             return 200, _rows(c, "SELECT category,symbol,detail,value FROM fno_intel")
+
+        if path == "/api/ideas":
+            cd = c.execute("SELECT MAX(card_date) FROM idea_card").fetchone()[0]
+            cards = _rows(c, "SELECT symbol,company,sector,thesis_type,timeframe_class,"
+                             "entry,stop,target,rr_ratio,size_shares,confidence_score,pillar_json "
+                             "FROM idea_card WHERE card_date=? ORDER BY confidence_score DESC", (cd,))
+            import json as _json
+            for row in cards:
+                row["pillars"] = _json.loads(row.pop("pillar_json") or "{}")
+            return 200, {"card_date": cd, "n": len(cards), "cards": cards}
+
+        m = re.match(r"/api/thesis/(\d+)$", path)
+        if m:
+            tid = int(m.group(1))
+            th = _rows(c, "SELECT * FROM thesis WHERE thesis_id=?", (tid,))
+            if not th:
+                return 404, {"error": f"no thesis {tid}"}
+            trades = _rows(c, "SELECT entry_date,entry_price,stop,target,size_shares,atr_k,"
+                              "exit_date,exit_price,exit_reason,realized_return FROM trade "
+                              "WHERE thesis_id=? ORDER BY trade_id", (tid,))
+            audit = _rows(c, "SELECT pillar,subscore,weight,contribution,weight_version "
+                             "FROM score_audit WHERE thesis_id=? ORDER BY contribution DESC", (tid,))
+            return 200, {"thesis": th[0], "trades": trades, "score_audit": audit}
 
         m = re.match(r"/api/asset/([A-Za-z0-9&._\-]+)$", path)
         if m:

@@ -134,6 +134,7 @@ DAILY_PHASES = [
     # --- analytics products (refresh the dashboard from the research layer) ---
     ("signals",     "common/generate_signals.py",              "Live top-decile book + 4-vote regime",  None, 300),
     ("recos",       "common/recommendations.py",               "Stock recos (entry/target/stop) + score", None, 600),
+    ("idea_cards",  "ideas/build_idea_cards.py",               "Idea Engine: ATR bands + 6-pillar scoring + cards", None, 600),
     ("intel",       "common/build_market_intel.py",            "Deals + F&O positioning intel",         None, 300),
     ("dashboard",   "common/build_dashboard.py",               "Build self-contained HTML dashboard",   None, 300),
     ("monitor",     "common/monitor.py",                       "Health-check (freshness/quality/regime)", None, 180),
@@ -146,6 +147,8 @@ WEEKLY_PHASES = [
     ("corp_actions",   "events/update_corporate_actions.py",   "Corporate Actions",                     None, 1800),
     ("amfi_flows",     "funds/backfill_amfi_industry.py",      "AMFI MF industry monthly flows",        None, 600),
     ("index_members",  "registry/fetch_index_constituents.py", "Index constituents + sector",           None, 300),
+    ("index_membership","registry/build_index_membership.py",   "Named PIT index membership (hybrid)",    None, 600),
+    ("top500_sectors", "registry/backfill_top500_sectors.py",   "Top-500 sector coverage (ETF tag)",      None, 120),
     ("pcr",            "market/compute_options_analytics.py",  "Options PCR / OI analytics (from fo_data)", None, 900),
     ("max_pain",       "market/compute_max_pain.py",           "Index options max-pain (from fo_data)", None, 600),
     ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
