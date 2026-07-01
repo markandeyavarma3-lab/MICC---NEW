@@ -1,9 +1,9 @@
 # MICC Ultra-Advanced Upgrade — Part 1 Execution Plan (Pin-to-Pin)
 
-> Status: **BUILT — all stages complete, verify_phases 49/49 green (2026-07).**
+> Status: **BUILT — all 7 stages complete, verify_phases 49/49 green (2026-07).**
 > Wired into run_pipeline (daily `idea_cards`; weekly `index_membership` +
-> `top500_sectors`). Remaining: Stage 5 automation (Task Scheduler) is scaffolded
-> separately. Author: pipeline audit, 2026-07-01.
+> `top500_sectors`). Stage 5 automation scripts in `automation/` (register once as
+> admin; not auto-run). Author: pipeline audit, 2026-07-01.
 > Scope: Part 1 (Foundation & Idea Engine core). Part 2 (signal depth) and Part 3
 > (learning loop / risk / ML overlay) are explicitly deferred — see §Deferred.
 
