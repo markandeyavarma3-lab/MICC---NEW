@@ -150,6 +150,7 @@ WEEKLY_PHASES = [
     ("max_pain",       "market/compute_max_pain.py",           "Index options max-pain (from fo_data)", None, 600),
     ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
     ("annual_fin",     "events/fetch_annual_financials.py",    "Annual financials (yfinance)",          None, 7200),
+    ("alphavantage",   "events/fetch_alphavantage.py",         "AlphaVantage US earnings/holdings/insider", None, 300),
     # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---
     ("isin",        "registry/build_isin_master.py",      "ISIN master + renames",                  None, 600),
     ("adj_prices",  "common/build_adjusted_prices.py",    "Corp-action adjusted prices",            None, 1200),
