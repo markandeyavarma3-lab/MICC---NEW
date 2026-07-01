@@ -5,6 +5,7 @@ accumulates); financial_results = filed results metadata. Idempotent.
 
 Run:  py -3.14 events/fetch_earnings_calendar.py
 """
+import re
 import sqlite3
 from pathlib import Path
 from datetime import datetime
@@ -26,12 +27,27 @@ def sess():
 
 
 def _iso(d):
-    for fmt in ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %b %Y"):
-        try:
-            return datetime.strptime(str(d).strip(), fmt).strftime("%Y-%m-%d")
-        except Exception:
-            pass
-    return str(d).strip()[:10] if d else None
+    """Parse a date that may carry a trailing time component (NSE sends
+    '25-Jun-2026 16:39:17'). Never returns a truncated partial date."""
+    if not d:
+        return None
+    s = str(d).strip()
+    candidates = [s, s.split()[0] if s.split() else s]   # full, then date token
+    fmts = ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %b %Y", "%d/%m/%Y")
+    for cand in candidates:
+        for fmt in fmts:
+            try:
+                return datetime.strptime(cand, fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+    m = re.search(r"\d{1,2}-[A-Za-z]{3}-\d{4}", s) or re.search(r"\d{4}-\d{2}-\d{2}", s)
+    if m:
+        for fmt in ("%d-%b-%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(m.group(), fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+    return None   # unparseable -> NULL, never a half date
 
 
 def main():

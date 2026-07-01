@@ -131,6 +131,12 @@ DAILY_PHASES = [
     ("earnings",    "events/fetch_earnings_calendar.py",       "Board meetings + results calendar",     None, 120),
     ("greeks",      "market/phase2_greeks_calculator.py",      "Greeks + GEX (incremental)",            ["--daily"], 600),
     ("trends",      "trends/fetch_trends.py",                  "Google Trends",                         ["--quiet"], 300),
+    # --- analytics products (refresh the dashboard from the research layer) ---
+    ("signals",     "common/generate_signals.py",              "Live top-decile book + 4-vote regime",  None, 300),
+    ("recos",       "common/recommendations.py",               "Stock recos (entry/target/stop) + score", None, 600),
+    ("intel",       "common/build_market_intel.py",            "Deals + F&O positioning intel",         None, 300),
+    ("dashboard",   "common/build_dashboard.py",               "Build self-contained HTML dashboard",   None, 300),
+    ("monitor",     "common/monitor.py",                       "Health-check (freshness/quality/regime)", None, 180),
 ]
 
 WEEKLY_PHASES = [
@@ -144,6 +150,14 @@ WEEKLY_PHASES = [
     ("max_pain",       "market/compute_max_pain.py",           "Index options max-pain (from fo_data)", None, 600),
     ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
     ("annual_fin",     "events/fetch_annual_financials.py",    "Annual financials (yfinance)",          None, 7200),
+    # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---
+    ("isin",        "registry/build_isin_master.py",      "ISIN master + renames",                  None, 600),
+    ("adj_prices",  "common/build_adjusted_prices.py",    "Corp-action adjusted prices",            None, 1200),
+    ("pit_univ",    "registry/build_pit_universe.py",     "Point-in-time equity universe",          None, 900),
+    ("features",    "common/build_feature_store.py",      "As-of feature store + IC report",        None, 900),
+    ("backtest",    "common/backtest_momentum.py",        "Flagship backtest (bt_equity/metrics)",  None, 600),
+    ("best_config", "common/backtest_best.py",            "Regime-validated best config (bt_best)", None, 600),
+    ("mf_score",    "funds/mf_scorecard.py",              "Equity MF risk-adjusted scorecard",      None, 900),
 ]
 
 

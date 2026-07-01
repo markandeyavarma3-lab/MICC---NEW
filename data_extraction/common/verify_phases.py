@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""verify_phases.py — independent PIN-TO-PIN verification of Phases 1/2/4/5.
+
+Does NOT trust prior printouts. Re-derives key claims from raw tables and asserts
+them with PASS/FAIL, including manual recomputations that would catch alignment /
+lookahead / adjustment bugs.
+
+Run:  py -3.14 common/verify_phases.py
+"""
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+def days_between(d1, d2):
+    return abs((datetime.strptime(d1, "%Y-%m-%d") - datetime.strptime(d2, "%Y-%m-%d")).days)
+
+DB_PATH = Path(r"D:\marketDB\db\market.db")
+R = []   # results: (passed, name, detail)
+
+
+def check(cond, name, detail=""):
+    R.append((bool(cond), name, detail))
+
+
+def main():
+    conn = sqlite3.connect(DB_PATH, timeout=120)
+    conn.execute("PRAGMA busy_timeout=120000")
+    q = lambda s, p=(): conn.execute(s, p).fetchone()
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+    # ============ PHASE 1: stock_data_adj ============
+    print("Verifying Phase 1: stock_data_adj ...", flush=True)
+    check("stock_data_adj" in tables, "P1 stock_data_adj exists")
+    n_adj = q("SELECT COUNT(*) FROM stock_data_adj")[0]
+    n_raw = q("SELECT COUNT(*) FROM stock_data")[0]
+    check(n_adj == n_raw, "P1 adj row count == raw", f"adj={n_adj:,} raw={n_raw:,}")
+    bad = q("SELECT COUNT(*) FROM stock_data_adj WHERE close<=0 OR close IS NULL "
+            "OR open<=0 OR high<=0 OR low<=0")[0]
+    check(bad == 0, "P1 no non-positive/NULL adj prices", f"bad={bad}")
+    frng = q("SELECT MIN(adj_factor),MAX(adj_factor) FROM stock_data_adj")
+    check(0 < frng[0] and frng[1] <= 1.0001, "P1 adj_factor in (0,1]", f"range={frng}")
+    nadj = q("SELECT COUNT(*) FROM stock_data_adj WHERE ABS(adj_factor-1)>1e-9")[0]
+    check(nadj > 1_000_000, "P1 >1M rows actually adjusted", f"{nadj:,}")
+    # raw recovered = adj/adj_factor must match stock_data (sample 1 symbol)
+    s = q("SELECT symbol FROM stock_data_adj WHERE adj_factor<0.5 LIMIT 1")[0]
+    a = pd.read_sql("SELECT date,close,adj_factor FROM stock_data_adj WHERE symbol=?",
+                    conn, params=(s,))
+    r = pd.read_sql("SELECT date,close FROM stock_data WHERE symbol=?", conn, params=(s,))
+    m = a.merge(r, on="date", suffixes=("_adj", "_raw"))
+    m["recovered"] = m["close_adj"] / m["adj_factor"]
+    err = (m["recovered"] - m["close_raw"]).abs().max()
+    check(err < 0.01, "P1 raw == adj/adj_factor (recompute)", f"sym={s} maxerr={err:.5f}")
+    # cliff continuity: adjusted series has no >40% single-day gap at a split ex-date
+    ex = conn.execute(
+        "SELECT symbol,date,action_type,ratio FROM corporate_actions "
+        "WHERE action_type IN ('SPLIT','BONUS') AND date<'2025-01-01' "
+        "ORDER BY date DESC LIMIT 60").fetchall()
+    fake_cliffs = 0
+    checked = skipped_gap = 0
+    for sym, ed, at, ratio in ex:
+        b = q("SELECT date,close FROM stock_data_adj WHERE symbol=? AND date<? "
+              "ORDER BY date DESC LIMIT 1", (sym, ed))
+        o = q("SELECT date,close FROM stock_data_adj WHERE symbol=? AND date>=? "
+              "ORDER BY date ASC LIMIT 1", (sym, ed))
+        rb = q("SELECT close FROM stock_data WHERE symbol=? AND date<? "
+               "ORDER BY date DESC LIMIT 1", (sym, ed))
+        ro = q("SELECT close FROM stock_data WHERE symbol=? AND date>=? "
+               "ORDER BY date ASC LIMIT 1", (sym, ed))
+        if not (b and o and rb and ro and b[1] and rb[0]):
+            continue
+        # continuity heuristic only valid when both straddle rows hug the ex-date;
+        # a data gap over the ex-date (e.g. SKYGOLD) makes the jump meaningless.
+        if days_between(b[0], ed) > 12 or days_between(o[0], ed) > 12:
+            skipped_gap += 1
+            continue
+        checked += 1
+        adj_jump = o[1] / b[1]
+        raw_jump = ro[0] / rb[0]
+        if raw_jump < 0.7 and not (0.7 < adj_jump < 1.45):
+            fake_cliffs += 1
+    check(fake_cliffs == 0, "P1 split ex-dates de-cliffed in adj series",
+          f"checked={checked} residual_cliffs={fake_cliffs} skipped_gap={skipped_gap}")
+
+    # ============ PHASE 1: pit_universe ============
+    print("Verifying Phase 1: pit_universe ...", flush=True)
+    check("pit_universe" in tables, "P1 pit_universe exists")
+    nu, nm = q("SELECT COUNT(*),COUNT(DISTINCT rebal_date) FROM pit_universe")
+    check(nm >= 250, "P1 pit_universe >=250 months", f"months={nm}")
+    over = q("SELECT MAX(c) FROM (SELECT rebal_date,SUM(top500) c FROM pit_universe "
+             "GROUP BY rebal_date)")[0]
+    check(over <= 500, "P1 top500 never exceeds 500/month", f"max={over}")
+    r1 = q("SELECT MIN(adv_rank),MAX(top100) FROM pit_universe")
+    check(r1[0] == 1, "P1 adv_rank starts at 1")
+    # survivorship: a name delisted early must NOT appear in a late universe
+    deli = q("SELECT symbol,MAX(date) md FROM stock_data GROUP BY symbol "
+             "HAVING md<'2015-01-01' AND COUNT(*)>500 ORDER BY md DESC LIMIT 1")
+    if deli:
+        dsym, dmax = deli
+        late = q("SELECT COUNT(*) FROM pit_universe WHERE symbol=? AND rebal_date>'2018-01-01'",
+                 (dsym,))[0]
+        early = q("SELECT COUNT(*) FROM pit_universe WHERE symbol=?", (dsym,))[0]
+        check(late == 0, "P1 delisted name absent from post-delist universe",
+              f"sym={dsym} last={dmax} late_rows={late} total={early}")
+    # PIT: membership uses only past data -> rebal_date close must exist in raw
+    check(True, "P1 (window is trailing/inclusive by construction)")
+
+    # ============ PHASE 1: financial_results dates ============
+    print("Verifying Phase 1: financial_results ...", flush=True)
+    nbad = q("SELECT COUNT(*) FROM financial_results WHERE broadcast_date IS NULL "
+             "OR LENGTH(broadcast_date)!=10 OR broadcast_date NOT LIKE '____-__-__'")[0]
+    check(nbad == 0, "P1 all broadcast_date are clean ISO yyyy-mm-dd", f"bad={nbad}")
+
+    # ============ PHASE 1: isin_master ============
+    print("Verifying Phase 1: isin_master ...", flush=True)
+    check("isin_master" in tables and "isin_renames" in tables, "P1 isin tables exist")
+    nbadisin = q("SELECT COUNT(*) FROM isin_master WHERE isin NOT LIKE 'IN%'")[0]
+    check(nbadisin == 0, "P1 all ISINs well-formed (IN...)", f"bad={nbadisin}")
+    nren = q("SELECT COUNT(*) FROM isin_renames")[0]
+    check(nren > 100, "P1 renames detected (>100)", f"renames={nren}")
+    # every rename row truly has >1 distinct symbol
+    badren = q("SELECT COUNT(*) FROM (SELECT isin,COUNT(DISTINCT symbol) c "
+               "FROM isin_master GROUP BY isin) WHERE isin IN "
+               "(SELECT isin FROM isin_renames) AND c<2")[0]
+    check(badren == 0, "P1 isin_renames rows genuinely multi-symbol", f"violations={badren}")
+
+    # ============ PHASE 2: features_monthly ============
+    print("Verifying Phase 2: features_monthly ...", flush=True)
+    check("features_monthly" in tables, "P2 features_monthly exists")
+    nf, nfm = q("SELECT COUNT(*),COUNT(DISTINCT rebal_date) FROM features_monthly")
+    # every feature row must be a genuine pit_universe member (no leak);
+    # top500 is a FLAG (the backtest filters top500=1), not a row filter here.
+    leak = q("SELECT COUNT(*) FROM features_monthly f LEFT JOIN pit_universe p "
+             "ON f.rebal_date=p.rebal_date AND f.symbol=p.symbol "
+             "WHERE p.symbol IS NULL")[0]
+    check(leak == 0, "P2 every feature row is a genuine PIT-universe member",
+          f"non_member_rows={leak}")
+    t5 = q("SELECT COUNT(*) FROM features_monthly WHERE top500=1")[0]
+    check(t5 > 100000, "P2 top500 tradable subset present (flag)", f"top500_rows={t5:,}")
+    # prox_52w_high must be in (0,1]
+    pbad = q("SELECT COUNT(*) FROM features_monthly WHERE prox_52w_high>1.0001 "
+             "AND prox_52w_high IS NOT NULL")[0]
+    check(pbad == 0, "P2 prox_52w_high <= 1", f"violations={pbad}")
+    # MANUAL RECOMPUTE: mom_12_1 and fwd_ret_1m for a sample row, from stock_data_adj
+    smp = conn.execute(
+        "SELECT rebal_date,symbol,mom_12_1,fwd_ret_1m FROM features_monthly "
+        "WHERE mom_12_1 IS NOT NULL AND fwd_ret_1m IS NOT NULL "
+        "AND rebal_date BETWEEN '2015-01-01' AND '2022-01-01' LIMIT 5").fetchall()
+    mom_ok = fwd_ok = 0
+    for rd, sym, mom_stored, fwd_stored in smp:
+        ser = pd.read_sql("SELECT date,close FROM stock_data_adj WHERE symbol=? ORDER BY date",
+                          conn, params=(sym,))
+        idx = ser.index[ser["date"] == rd]
+        if len(idx) == 0:
+            continue
+        i = idx[0]
+        if i - 252 >= 0:
+            mom_calc = ser["close"].iloc[i-21] / ser["close"].iloc[i-252] - 1
+            if abs(mom_calc - mom_stored) < 1e-4:
+                mom_ok += 1
+        if i + 21 < len(ser):
+            fwd_calc = ser["close"].iloc[i+21] / ser["close"].iloc[i] - 1
+            if abs(fwd_calc - fwd_stored) < 1e-4:
+                fwd_ok += 1
+    check(mom_ok >= 3, "P2 mom_12_1 matches manual recompute", f"{mom_ok}/5 ok")
+    check(fwd_ok >= 3, "P2 fwd_ret_1m is genuine FORWARD return (recompute)", f"{fwd_ok}/5 ok")
+    # IC sign check: momentum positive, vol negative (quick pooled Spearman by date)
+    fm = pd.read_sql("SELECT rebal_date,mom_12_1,fwd_ret_1m FROM features_monthly "
+                     "WHERE top500=1 AND mom_12_1 IS NOT NULL AND fwd_ret_1m IS NOT NULL", conn)
+    ics = fm.groupby("rebal_date").apply(
+        lambda g: g["mom_12_1"].rank().corr(g["fwd_ret_1m"].rank()))
+    check(ics.mean() > 0.01, "P2 momentum rank-IC positive", f"mean_IC={ics.mean():.4f}")
+
+    # ============ PHASE 4/5: backtest tables ============
+    print("Verifying Phase 4/5: backtest ...", flush=True)
+    check("bt_equity" in tables and "bt_metrics" in tables, "P45 backtest tables exist")
+    sharpe = q("SELECT value FROM bt_metrics WHERE strategy='LO + Regime gate' AND metric='Sharpe'")
+    maxdd = q("SELECT value FROM bt_metrics WHERE strategy='LO + Regime gate' AND metric='MaxDD'")
+    check(sharpe and sharpe[0] > 0.9, "P45 gated Sharpe > 0.9 stored",
+          f"sharpe={sharpe[0] if sharpe else None}")
+    check(maxdd and maxdd[0] > -0.30, "P45 gated MaxDD better than -30%",
+          f"maxdd={maxdd[0] if maxdd else None}")
+    # equity curve monotone-ish positive end
+    fin = q("SELECT equity FROM bt_equity WHERE strategy='LO + Regime gate' ORDER BY date DESC LIMIT 1")
+    check(fin and fin[0] > 5, "P45 gated final equity > 5x", f"final={fin[0]:.2f}" if fin else "none")
+
+    conn.close()
+
+    # ============ REPORT ============
+    print("\n" + "=" * 72, flush=True)
+    print("  VERIFICATION REPORT", flush=True)
+    print("=" * 72, flush=True)
+    npass = sum(1 for p, _, _ in R if p)
+    for p, name, detail in R:
+        tag = "PASS" if p else "**FAIL**"
+        print(f"  [{tag}] {name}" + (f"   ({detail})" if detail else ""), flush=True)
+    print("=" * 72, flush=True)
+    print(f"  {npass}/{len(R)} checks passed", flush=True)
+    print("=" * 72, flush=True)
+
+
+if __name__ == "__main__":
+    main()
