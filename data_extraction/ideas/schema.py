@@ -56,6 +56,8 @@ DDL = [
         thesis_type  TEXT, timeframe_class TEXT,
         entry REAL, stop REAL, target REAL, rr_ratio REAL, size_shares INTEGER,
         confidence_score REAL,
+        notional REAL,          -- size_shares * entry (rupees deployed)
+        in_book INTEGER,        -- 1 if selected within the portfolio capital cap
         pillar_json  TEXT,       -- per-pillar breakdown for "why this score"
         status TEXT,
         PRIMARY KEY (card_date, thesis_id)
@@ -96,6 +98,11 @@ def connect():
 def ensure_tables(conn):
     for stmt in DDL:
         conn.execute(stmt)
+    # additive migrations for tables that predate a column (SQLite ADD COLUMN is safe)
+    have = {r[1] for r in conn.execute("PRAGMA table_info(idea_card)")}
+    for col, decl in (("notional", "REAL"), ("in_book", "INTEGER")):
+        if col not in have:
+            conn.execute(f"ALTER TABLE idea_card ADD COLUMN {col} {decl}")
     conn.commit()
 
 

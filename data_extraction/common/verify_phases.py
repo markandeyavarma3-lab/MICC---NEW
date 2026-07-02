@@ -295,12 +295,29 @@ def main():
         rr = [ (tg - e) / (e - s) for e, s, tg, _, _ in bands if e - s > 0 ]
         check(all(abs(x - 2.0) < 0.05 for x in rr), "P8 bands: reward:risk ~ 2:1",
               f"min={min(rr):.2f} max={max(rr):.2f}")
-        # equal rupee-risk: size*(entry-stop) within one share-of-risk of the budget
-        risk = [ sz * (e - s) for e, s, tg, sz, _ in bands ]
-        spread = (max(risk) - min(risk))
-        check(spread < max(e - s for e, s, tg, sz, _ in bands) + 1,
-              "P8 bands: equal rupee-risk sizing", f"risk spread={spread:.0f}")
+        # owner rule: stop-loss never more than 10% below entry
+        max_stop_pct = max((e - s) / e for e, s, tg, sz, _ in bands)
+        check(max_stop_pct <= 0.10 + 1e-4, "P8 bands: stop-loss <= 10% for all",
+              f"max_stop={max_stop_pct:.1%}")
+        # risk per idea never EXCEEDS the budget (position cap can only lower it)
+        max_risk = max(sz * (e - s) for e, s, tg, sz, _ in bands)
+        check(max_risk <= 10000 + max(e - s for e, s, tg, sz, _ in bands) + 1,
+              "P8 bands: risk <= budget per idea", f"max_risk={max_risk:,.0f}")
         check(all(k is not None for *_, k in bands), "P8 bands: atr_k persisted per trade")
+        # portfolio-level capital cap: selected book never exceeds capital
+        if "idea_card" in tables:
+            deployed = q("SELECT COALESCE(SUM(notional),0) FROM idea_card "
+                         "WHERE in_book=1 AND card_date=(SELECT MAX(card_date) FROM idea_card)")[0]
+            import sys as _s
+            _s.path.insert(0, str(Path(__file__).resolve().parents[1] / "ideas"))
+            import build_bands as _bb
+            check(deployed <= _bb.CAPITAL + 1e-6, "P8 portfolio: in-book notional <= capital",
+                  f"deployed={deployed:,.0f} cap={_bb.CAPITAL:,.0f}")
+            # no in-book position exceeds the concentration cap
+            over = q("SELECT COUNT(*) FROM idea_card WHERE in_book=1 AND notional > ? "
+                     "AND card_date=(SELECT MAX(card_date) FROM idea_card)",
+                     (_bb.MAX_POSITION_PCT * _bb.CAPITAL + 1,))[0]
+            check(over == 0, "P8 portfolio: no position exceeds concentration cap", f"over={over}")
 
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:

@@ -25,12 +25,14 @@ import os
 from schema import connect, ensure_tables
 
 LIVE_TAG   = "live:momentum_bands"
-# INR risk per idea (equal-risk sizing). Config via env so it can change without a
-# code edit mid-pipeline (reviewer #3). Default 10k.
-RISK_BUDGET = float(os.environ.get("MICC_RISK_BUDGET", "10000"))
+# --- capital & risk config (env-overridable; defaults = owner's stated book) ---
+CAPITAL     = float(os.environ.get("MICC_CAPITAL", "10000000"))   # INR 1 crore
+RISK_BUDGET = float(os.environ.get("MICC_RISK_BUDGET", "10000"))  # INR risk per idea
+MAX_STOP_PCT     = 0.10   # owner rule: stop is NEVER more than 10% below entry
+MAX_POSITION_PCT = 0.10   # single position notional <= 10% of capital (concentration cap)
 ADX_TREND  = 25.0        # ADX above this = trending -> positional
-K_SWING       = 1.75     # ATR multiplier, swing (conventional 1.5-2.0)
-K_POSITIONAL  = 2.75     # ATR multiplier, positional (conventional 2.5-3.0)
+K_SWING       = 1.75     # ATR multiplier, swing (placeholder; re-calibrated in Part 3)
+K_POSITIONAL  = 2.75     # ATR multiplier, positional (placeholder; re-calibrated in Part 3)
 R_MULTIPLE = 2.0         # target distance = R x stop distance (1:2 reward:risk)
 MAX_ATR_FRAC = 0.9       # guard: skip pathological ATR that would push stop<=0
 
@@ -77,13 +79,17 @@ def main():
             continue
         entry = float(entry[0])
         tf, k = classify(adx, (above_pct or 0) > 0)
-        stop = round(entry - entry * k * atr_frac, 2)
+        # ATR-derived stop distance, but never wider than MAX_STOP_PCT (owner rule)
+        stop_dist = min(entry * k * atr_frac, entry * MAX_STOP_PCT)
+        stop = round(entry - stop_dist, 2)
         stop_dist = entry - stop                      # rounded distance drives all downstream
         if stop_dist <= 0:
             skipped += 1
             continue
         target = round(entry + R_MULTIPLE * stop_dist, 2)
-        size   = int(math.floor(RISK_BUDGET / stop_dist))
+        size = int(math.floor(RISK_BUDGET / stop_dist))
+        # concentration cap: a single position can't exceed MAX_POSITION_PCT of capital
+        size = min(size, int(math.floor(MAX_POSITION_PCT * CAPITAL / entry)))
         if size < 1 or not (stop < entry < target):
             skipped += 1
             continue
@@ -113,9 +119,12 @@ def main():
         "WHERE h.narrative=? AND h.created_at=?", (LIVE_TAG, card_date)).fetchall()
     ok_order = all(s < e < tg for e, s, tg, _, _ in rows)
     ok_size  = all(sz >= 1 for _, _, _, sz, _ in rows)
-    # equal rupee risk: size * stop_distance ~ RISK_BUDGET (within one share)
-    ok_risk = all(abs(sz * (e - s) - RISK_BUDGET) <= (e - s) + 1e-6
-                  for e, s, tg, sz, _ in rows)
+    # owner rule: stop never more than 10% below entry
+    ok_stop = all((e - s) <= MAX_STOP_PCT * e + 0.01 for e, s, tg, sz, _ in rows)
+    # risk never EXCEEDS the per-idea budget (position cap can only lower it)
+    ok_risk = all(sz * (e - s) <= RISK_BUDGET + (e - s) + 1e-6 for e, s, tg, sz, _ in rows)
+    # no single position exceeds the concentration cap
+    ok_conc = all(sz * e <= MAX_POSITION_PCT * CAPITAL + e + 1e-6 for e, s, tg, sz, _ in rows)
     tf_counts = {}
     for r in cur.execute("SELECT timeframe_class,COUNT(*) FROM thesis WHERE narrative=? "
                          "AND created_at=? GROUP BY timeframe_class", (LIVE_TAG, card_date)):
@@ -124,7 +133,9 @@ def main():
     print(f"  timeframe split: {tf_counts}", flush=True)
     print(f"  {'PASS' if ok_order else 'FAIL'}: stop<entry<target for all", flush=True)
     print(f"  {'PASS' if ok_size else 'FAIL'}: size>=1 for all", flush=True)
-    print(f"  {'PASS' if ok_risk else 'FAIL'}: equal rupee-risk sizing", flush=True)
+    print(f"  {'PASS' if ok_stop else 'FAIL'}: stop-loss <= {MAX_STOP_PCT:.0%} for all", flush=True)
+    print(f"  {'PASS' if ok_risk else 'FAIL'}: risk <= budget per idea", flush=True)
+    print(f"  {'PASS' if ok_conc else 'FAIL'}: position <= {MAX_POSITION_PCT:.0%} of capital", flush=True)
     conn.close()
 
 

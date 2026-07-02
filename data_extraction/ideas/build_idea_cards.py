@@ -15,18 +15,21 @@ import json
 
 import build_bands
 import scoring
+from build_bands import CAPITAL
 from schema import connect, ensure_tables
 
 
 def materialise(conn, card_date):
     cur = conn.cursor()
     cur.execute("DELETE FROM idea_card WHERE card_date=?", (card_date,))
+    # confidence-ranked so the portfolio cap keeps the HIGHEST-conviction ideas
     live = cur.execute(
         "SELECT h.thesis_id,h.symbol,h.thesis_type,h.timeframe_class,h.confidence_score,"
-        "h.status FROM thesis h WHERE h.narrative='live:momentum_bands' AND h.created_at=?",
-        (card_date,)).fetchall()
+        "h.status FROM thesis h WHERE h.narrative='live:momentum_bands' AND h.created_at=? "
+        "ORDER BY h.confidence_score DESC", (card_date,)).fetchall()
 
     made = 0
+    cum_notional = 0.0          # portfolio-level capital cap: total deployed <= CAPITAL
     for tid, sym, ttype, tf, conf, status in live:
         tr = cur.execute(
             "SELECT entry_price,stop,target,size_shares FROM trade WHERE thesis_id=? "
@@ -35,6 +38,11 @@ def materialise(conn, card_date):
             continue
         entry, stop, target, size = tr
         rr = round((target - entry) / (entry - stop), 2) if entry and entry != stop else None
+        notional = round((size or 0) * entry, 2)
+        # include this idea only if it still fits under the capital cap (highest conf first)
+        in_book = 1 if (cum_notional + notional) <= CAPITAL else 0
+        if in_book:
+            cum_notional += notional
         company = cur.execute("SELECT company FROM current_signals WHERE symbol=? "
                               "AND rebal_date=? LIMIT 1", (sym, card_date)).fetchone()
         company = company[0] if company else sym
@@ -47,12 +55,13 @@ def materialise(conn, card_date):
         cur.execute(
             "INSERT INTO idea_card (card_date,thesis_id,symbol,company,sector,thesis_type,"
             "timeframe_class,entry,stop,target,rr_ratio,size_shares,confidence_score,"
-            "pillar_json,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "notional,in_book,pillar_json,status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (card_date, tid, sym, company, sector, ttype, tf, entry, stop, target, rr,
-             size, conf, json.dumps(pillars), status))
+             size, conf, notional, in_book, json.dumps(pillars), status))
         made += 1
     conn.commit()
-    return made
+    return made, cum_notional
 
 
 def main():
@@ -61,13 +70,17 @@ def main():
     conn = connect()
     ensure_tables(conn)
     card_date = conn.execute("SELECT MAX(rebal_date) FROM current_signals").fetchone()[0]
-    n = materialise(conn, card_date)
-    top = conn.execute("SELECT symbol,timeframe_class,confidence_score,rr_ratio "
+    n, deployed = materialise(conn, card_date)
+    in_book = conn.execute("SELECT COUNT(*),COALESCE(SUM(notional),0) FROM idea_card "
+                           "WHERE card_date=? AND in_book=1", (card_date,)).fetchone()
+    top = conn.execute("SELECT symbol,timeframe_class,confidence_score,rr_ratio,in_book "
                        "FROM idea_card WHERE card_date=? ORDER BY confidence_score DESC LIMIT 5",
                        (card_date,)).fetchall()
     print(f"\n  idea_card materialised: {n} cards for {card_date}", flush=True)
-    for s, tf, c, rr in top:
-        print(f"    {s:12} {tf:10} conf {c:5.1f}  rr {rr}", flush=True)
+    print(f"  portfolio: {in_book[0]}/{n} in book, deployed Rs {in_book[1]:,.0f} "
+          f"/ Rs {CAPITAL:,.0f} ({in_book[1]/CAPITAL:.0%})", flush=True)
+    for s, tf, c, rr, ib in top:
+        print(f"    {s:12} {tf:10} conf {c:5.1f}  rr {rr}  {'[book]' if ib else '[waitlist]'}", flush=True)
     conn.close()
 
 

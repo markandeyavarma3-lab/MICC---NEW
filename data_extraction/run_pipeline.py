@@ -147,6 +147,7 @@ WEEKLY_PHASES = [
     ("corp_actions",   "events/update_corporate_actions.py",   "Corporate Actions",                     None, 1800),
     ("amfi_flows",     "funds/backfill_amfi_industry.py",      "AMFI MF industry monthly flows",        None, 600),
     ("index_members",  "registry/fetch_index_constituents.py", "Index constituents + sector",           None, 300),
+    ("nifty50_hist",   "registry/fetch_niftyindices_nifty50.py","NIFTY 50 survivorship-free history (niftyindices)", None, 120),
     ("index_membership","registry/build_index_membership.py",   "Named PIT index membership (hybrid)",    None, 600),
     ("top500_sectors", "registry/backfill_top500_sectors.py",   "Top-500 sector coverage (ETF tag)",      None, 120),
     ("pcr",            "market/compute_options_analytics.py",  "Options PCR / OI analytics (from fo_data)", None, 900),

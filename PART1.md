@@ -1,7 +1,7 @@
 # MICC — Part 1: Idea Engine & Foundation Hardening (As-Built Reference)
 
-**Status:** ✅ Complete · `verify_phases.py` **51/51 green** · branch `feat/part1-idea-engine`
-(includes post-review hardening — see §9)
+**Status:** ✅ Complete · `verify_phases.py` **54/54 green** · branch `feat/part1-idea-engine`
+(includes post-review hardening + owner sizing spec — see §9)
 **Date:** 2026-07 · **DB:** `D:\marketDB\db\market.db` (system-of-record) · **Interpreter:** `py -3.14`
 
 This is the **as-built** reference for Part 1 — what exists in the code and database
@@ -102,11 +102,12 @@ PK `(thesis_id, card_date, pillar)`. Makes every confidence number exactly repro
 ### 2.6 `index_membership` — named PIT index membership (Stage 1A)
 `index_name, symbol, effective_from, effective_to, method, confidence, fetched_at` ·
 PK `(index_name, symbol, effective_from)`. `effective_to IS NULL` = still a member.
-**14,150 rows** = 1,100 official-current + 13,050 reconstructed-historical (NIFTY 50/100/
-200/500). `confidence` is **measured** (= current turnover-topN agreement), not guessed.
-A companion **view `index_membership_consumable`** exposes only rows with
-`confidence ≥ 0.75` — the *only* membership Part 2 signals may join (weak narrow-index
-history is quarantined; see §9).
+**13,161 rows** = 1,100 official-current + 12,061 historical. Sources by method:
+**`niftyindices_official`** (NIFTY 50, **confidence 1.0** — real survivorship-free data,
+100 distinct symbols 2008→2025); **`reconstructed_turnover`** (NIFTY 100/200/500,
+confidence = measured agreement 0.63/0.80/0.78); **`official`** (current snapshot, 1.0).
+A companion **view `index_membership_consumable`** exposes only `confidence ≥ 0.75` — the
+*only* membership Part 2 signals may join (weak NIFTY 100 turnover history is quarantined).
 
 ---
 
@@ -241,12 +242,12 @@ trust prior printouts). Part 1 grew it from 29 → **49** checks:
 | Phase | Checks | Covers |
 |---|---|---|
 | P1–P5 | 29 | existing: adj prices (cadence-robust, §9), PIT universe, ISIN, features, backtest |
-| **P6** | 9 | fundamentals as-of, membership intervals, NIFTY 50 match, top-500 sector, **consumable-view quarantine** |
+| **P6** | 9 | fundamentals as-of, membership intervals, NIFTY 50 match, top-500 sector, consumable-view quarantine |
 | **P7** | 3 | idea-engine backfill parity (exact) + no orphan trades |
-| **P8** | 5 | ATR band invariants (order, size, 2:1 RR, equal-risk, `atr_k`) |
+| **P8** | 8 | ATR bands (order, size, 2:1 RR, `atr_k`) + **risk caps** (stop ≤ 10%, risk ≤ budget, position + portfolio capital caps) |
 | **P9** | 5 | scoring reproducibility, weight integrity, A3 cap, degenerate-weights == generate_signals |
 
-**Total: 51/51.**
+**Total: 54/54.**
 
 ---
 
@@ -308,29 +309,41 @@ py -3.14 common\verify_phases.py                # 49/49 acceptance gate
 
 ## 9. Post-review hardening (2026-07)
 
-Changes made in response to the Part-1 code review:
+Changes made in response to the Part-1 code review + an owner sizing spec.
 
-1. **Membership consumption guard (review #1 — "0.60-confidence table shouldn't be
-   consumed").** Local free-float market-cap data is effectively absent
-   (`stock_fundamentals.marketCap` is empty), so the reviewer's option (a) — market-cap
-   reconstruction — isn't achievable. Instead:
-   - `confidence` is now **measured** per index (current turnover-topN agreement), not
-     guessed: NIFTY 50 = 58%, 100 = 63%, 200 = 80%, 500 = 78%.
-   - New view **`index_membership_consumable`** exposes only `confidence ≥ 0.75`. Part 2's
-     index-relative signals must join **the view, never the raw table** — so the weak
-     narrow-index history (2,903 rows) is structurally quarantined, not merely flagged.
-   - `verify_phases` P6 asserts the view leaks no `conf<0.75` row and still carries the
-     official current members.
-   - *Proper fix deferred:* swap in a real historical source (Figshare/Wikipedia NIFTY
-     change-log) when doing Part 2's index-relative signals — tracked as the upgrade path.
-2. **Risk budget is now config (review #3).** `build_bands.py` reads
-   `MICC_RISK_BUDGET` (env, default ₹10,000) so it can change without a code edit
-   mid-pipeline.
-3. **`regime_align` (review #2 — note only):** acknowledged that it currently double-counts
-   breadth (one of the 4-vote gate's inputs). Left as-is; Part 2 replaces it with the real
-   macro spine. **Do not tune weights before then.**
-4. **Cadence-robust adj check (found during review testing):** the daily raw update
-   legitimately runs ahead of the weekly `stock_data_adj` rebuild, which was making the
-   strict `n_adj == n_raw` check false-alarm daily. It now asserts adj *covers* raw within
-   its own date range (≤ 0.5% pending-rebuild tolerance) and never *exceeds* raw — strong
-   enough to catch real bugs, robust to the daily/weekly cadence.
+**Review #1 — "0.60-confidence membership shouldn't be consumed" → fully fixed with real data.**
+The reviewer's option (a) (market-cap reconstruction) was infeasible
+(`stock_fundamentals.marketCap` is empty). Option (b) worked: the survivorship-free
+**niftyindices** NIFTY 50 constituent-weights history exists on HuggingFace/Figshare
+(`AMP4010/Historical_Nifty_50_Constituent_Weights_20Y`, CC BY-NC-SA).
+- New fetcher [`registry/fetch_niftyindices_nifty50.py`](data_extraction/registry/fetch_niftyindices_nifty50.py)
+  downloads it (retries once) to `data_storage/raw/niftyindices/`.
+- [`build_index_membership.py`](data_extraction/registry/build_index_membership.py) now
+  builds NIFTY 50 history from it (**`niftyindices_official`, confidence 1.0**) — 100
+  distinct symbols 2008→2025, validated against known changes (VEDL two stints, ZEEL
+  dropped ~2020, INFY continuous). This **replaces** the weak 58% turnover proxy for NIFTY 50.
+- For NIFTY 100/200/500 (no free authoritative source) confidence is still **measured**
+  (0.63/0.80/0.78). The **`index_membership_consumable`** view (conf ≥ 0.75) is the only
+  table Part 2 signals may join; now only NIFTY 100 turnover history is quarantined.
+- `verify_phases` P6 asserts the view leaks no `conf<0.75` row and keeps official members.
+
+**Owner sizing spec (₹1 cr book, stops ≤ 10%, portfolio cap).**
+- [`build_bands.py`](data_extraction/ideas/build_bands.py): stop distance capped so the
+  **stop-loss is never > 10%** below entry; a **concentration cap** keeps any single
+  position ≤ 10% of capital. `MICC_CAPITAL` (default ₹1,00,00,000) and `MICC_RISK_BUDGET`
+  (default ₹10,000, review #3) are env-configurable.
+- [`build_idea_cards.py`](data_extraction/ideas/build_idea_cards.py): a **portfolio-level
+  capital cap** selects ideas by confidence (highest first) until the ₹1 cr book is filled;
+  each card carries `notional` + `in_book` (1 = in the tradable book, 0 = waitlist).
+- `verify_phases` P8 now asserts: stop-loss ≤ 10%, risk ≤ budget per idea, no position >
+  concentration cap, and in-book notional ≤ capital. (Today: 46/46 fit, ₹70.9 L deployed.)
+
+**Review #2 — regime_align (note only):** acknowledged breadth double-count; left as
+placeholder, Part 2 replaces it. **Do not tune weights before then.**
+
+**Cadence-robust adj check (found during review testing):** the daily raw update legitimately
+leads the weekly `stock_data_adj` rebuild, which made the strict `n_adj == n_raw` check
+false-alarm daily. It now asserts adj *covers* raw within its own date range (≤ 0.5%
+pending-rebuild tolerance) and never *exceeds* raw.
+
+**Suite total after hardening: 54/54.**

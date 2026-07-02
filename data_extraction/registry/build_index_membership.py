@@ -17,6 +17,7 @@ HYBRID, and honest about it:
 Idempotent: rebuilds the whole table each run. Never touches source tables.
 Run:  py -3.14 registry/build_index_membership.py
 """
+import csv
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -24,10 +25,14 @@ from pathlib import Path
 import pandas as pd
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
+NIFTY50_CSV = (Path(__file__).resolve().parents[1].parent / "data_storage" / "raw"
+               / "niftyindices" / "weights.csv")
 
 # index_name -> top-N by turnover rank for historical reconstruction.
 # Confidence is NOT guessed -- it is MEASURED per index as the current turnover-topN
 # agreement with the official list, then stamped on that index's historical rows.
+# NIFTY 50 is EXCLUDED here when the authoritative niftyindices CSV is present (it
+# replaces the weak turnover proxy with real survivorship-free membership).
 RECON_TOPN = {"NIFTY 50": 50, "NIFTY 100": 100, "NIFTY 200": 200, "NIFTY 500": 500}
 # all size indices whose current membership we lift straight from the snapshot
 OFFICIAL_INDICES = ["NIFTY 50", "NIFTY 100", "NIFTY 200", "NIFTY 500",
@@ -81,6 +86,33 @@ def reconstruct_intervals(pu, index_name, topn, conf, cutoff, now):
     return out
 
 
+def load_niftyindices_nifty50(now):
+    """Build NIFTY 50 membership intervals from the official niftyindices weights
+    matrix (weight>0 => member that month). Returns rows or [] if the CSV is absent."""
+    if not NIFTY50_CSV.exists():
+        return []
+    rows = list(csv.reader(NIFTY50_CSV.open(encoding="utf-8")))
+    header, data = rows[0], rows[1:]
+    dates = [r[0] for r in data]
+    date_idx = {d: i for i, d in enumerate(dates)}
+    out = []
+    for col in range(1, len(header)):
+        sym = header[col]
+        member_months = [data[i][0] for i in range(len(data))
+                         if data[i][col] not in ("", "0", "0.0") and float(data[i][col]) > 0]
+        if not member_months:
+            continue
+        run_start = prev = member_months[0]
+        for m in member_months[1:]:
+            if date_idx[m] == date_idx[prev] + 1:          # contiguous month
+                prev = m
+                continue
+            out.append(("NIFTY 50", sym, run_start, prev, "niftyindices_official", 1.0, now))
+            run_start = prev = m
+        out.append(("NIFTY 50", sym, run_start, prev, "niftyindices_official", 1.0, now))
+    return out
+
+
 def main():
     conn = sqlite3.connect(DB_PATH, timeout=180)
     conn.execute("PRAGMA busy_timeout=180000")
@@ -106,7 +138,19 @@ def main():
     latest_pu = pu["rebal_date"].max()
     hist_n = 0
     measured = {}
-    for idx, topn in RECON_TOPN.items():
+
+    # NIFTY 50: use the authoritative niftyindices history if downloaded (real,
+    # survivorship-free) instead of the weak turnover proxy.
+    ni_rows = load_niftyindices_nifty50(now)
+    recon_indices = dict(RECON_TOPN)
+    if ni_rows:
+        ni_rows = [r for r in ni_rows if r[2] != cutoff]     # no PK clash with official
+        conn.executemany("INSERT OR REPLACE INTO index_membership VALUES (?,?,?,?,?,?,?)", ni_rows)
+        hist_n += len(ni_rows)
+        measured["NIFTY 50 (niftyindices)"] = 1.0
+        recon_indices.pop("NIFTY 50", None)                  # skip turnover proxy for 50
+
+    for idx, topn in recon_indices.items():
         recon_now = {r for r, in conn.execute(
             "SELECT symbol FROM pit_universe WHERE rebal_date=? AND adv_rank<=?",
             (latest_pu, topn))}
@@ -147,9 +191,11 @@ def main():
     print(f"  {'PASS' if match >= 0.99 else 'FAIL'}: NIFTY 50 current == official ({match:.0%})", flush=True)
     print(f"  {'PASS' if overlaps == 0 else 'FAIL'}: no overlapping intervals ({overlaps})", flush=True)
     print(f"  consumable view (conf>={CONSUMABLE_CONFIDENCE_MIN}): {consumable:,} rows kept, "
-          f"{quarantined:,} quarantined (weak narrow-index history)", flush=True)
-    print("  NOTE: turnover proxy -- Part 2 index-relative signals MUST use "
-          "index_membership_consumable, never the raw table.", flush=True)
+          f"{quarantined:,} quarantined", flush=True)
+    ni = "real niftyindices data (conf 1.0)" if ni_rows else "turnover proxy (~58%)"
+    print(f"  NIFTY 50 history source: {ni}", flush=True)
+    print("  NOTE: NIFTY 100 history stays turnover-proxy/quarantined; Part 2 index-relative "
+          "signals MUST use index_membership_consumable, never the raw table.", flush=True)
     conn.close()
 
 
