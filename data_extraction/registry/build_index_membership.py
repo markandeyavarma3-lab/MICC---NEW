@@ -25,11 +25,20 @@ import pandas as pd
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
 
-# index_name -> (top-N by turnover rank for reconstruction, historical confidence)
-RECON = {"NIFTY 50": (50, 0.60), "NIFTY 500": (500, 0.80)}
+# index_name -> top-N by turnover rank for historical reconstruction.
+# Confidence is NOT guessed -- it is MEASURED per index as the current turnover-topN
+# agreement with the official list, then stamped on that index's historical rows.
+RECON_TOPN = {"NIFTY 50": 50, "NIFTY 100": 100, "NIFTY 200": 200, "NIFTY 500": 500}
 # all size indices whose current membership we lift straight from the snapshot
 OFFICIAL_INDICES = ["NIFTY 50", "NIFTY 100", "NIFTY 200", "NIFTY 500",
                     "NIFTY NEXT 50", "NIFTY MIDCAP 100", "NIFTY SMALLCAP 100"]
+
+# Reviewer fix: a low-confidence membership table must not be silently consumed.
+# Anything below this is QUARANTINED out of the `index_membership_consumable` view,
+# which is the ONLY thing Part 2's index-relative signals are allowed to join.
+# (turnover proxy: NIFTY 50/100 history ~58-63% -> excluded; 200/500 ~78-80% -> kept;
+#  all official current rows are 1.0 -> always kept.)
+CONSUMABLE_CONFIDENCE_MIN = 0.75
 
 DDL = """CREATE TABLE IF NOT EXISTS index_membership (
     index_name   TEXT,
@@ -90,16 +99,31 @@ def main():
             off_rows.append((idx, sym, cutoff, None, "official", 1.0, now))
     conn.executemany("INSERT OR REPLACE INTO index_membership VALUES (?,?,?,?,?,?,?)", off_rows)
 
-    # 2) HISTORICAL reconstruction for the two indices we can proxy
+    # 2) HISTORICAL reconstruction. Confidence per index = MEASURED current
+    #    turnover-topN agreement with the official list (data-driven, not guessed).
     pu = pd.read_sql("SELECT rebal_date,symbol,adv_rank FROM pit_universe "
                      "WHERE adv_rank<=500", conn)
+    latest_pu = pu["rebal_date"].max()
     hist_n = 0
-    for idx, (topn, conf) in RECON.items():
+    measured = {}
+    for idx, topn in RECON_TOPN.items():
+        recon_now = {r for r, in conn.execute(
+            "SELECT symbol FROM pit_universe WHERE rebal_date=? AND adv_rank<=?",
+            (latest_pu, topn))}
+        off_now = {r for r, in conn.execute(
+            "SELECT symbol FROM index_constituents WHERE index_name=?", (idx,))}
+        conf = round(len(recon_now & off_now) / len(off_now), 2) if off_now else 0.0
+        measured[idx] = conf
         rows = reconstruct_intervals(pu, idx, topn, conf, cutoff, now)
-        # avoid clashing PK with the official row (same effective_from=cutoff)
-        rows = [r for r in rows if r[2] != cutoff]
+        rows = [r for r in rows if r[2] != cutoff]     # no PK clash with official row
         conn.executemany("INSERT OR REPLACE INTO index_membership VALUES (?,?,?,?,?,?,?)", rows)
         hist_n += len(rows)
+
+    # 3) CONSUMABLE view -- the ONLY membership Part 2 signals may join. Quarantines
+    #    any row below the confidence floor (weak narrow-index history stays out).
+    conn.execute("DROP VIEW IF EXISTS index_membership_consumable")
+    conn.execute(f"CREATE VIEW index_membership_consumable AS "
+                 f"SELECT * FROM index_membership WHERE confidence >= {CONSUMABLE_CONFIDENCE_MIN}")
     conn.commit()
 
     # --- self-checks ---
@@ -114,12 +138,18 @@ def main():
         "ON a.index_name=b.index_name AND a.symbol=b.symbol "
         "AND a.effective_from < b.effective_from "
         "AND (a.effective_to IS NULL OR a.effective_to > b.effective_from)").fetchone()[0]
+    consumable = conn.execute("SELECT COUNT(*) FROM index_membership_consumable").fetchone()[0]
+    quarantined = tot - consumable
     print(f"  index_membership rows: {tot:,}  (official={len(off_rows):,} historical={hist_n:,})", flush=True)
     print(f"  cutoff (snapshot date): {cutoff}", flush=True)
+    print(f"  measured historical confidence (=current agreement): "
+          + ", ".join(f"{k.split()[-1]}={v:.0%}" for k, v in measured.items()), flush=True)
     print(f"  {'PASS' if match >= 0.99 else 'FAIL'}: NIFTY 50 current == official ({match:.0%})", flush=True)
     print(f"  {'PASS' if overlaps == 0 else 'FAIL'}: no overlapping intervals ({overlaps})", flush=True)
-    print("  NOTE: historical NIFTY 50 is a turnover proxy (~58% accurate) -- "
-          "confidence-flagged, not for leakage-critical use.", flush=True)
+    print(f"  consumable view (conf>={CONSUMABLE_CONFIDENCE_MIN}): {consumable:,} rows kept, "
+          f"{quarantined:,} quarantined (weak narrow-index history)", flush=True)
+    print("  NOTE: turnover proxy -- Part 2 index-relative signals MUST use "
+          "index_membership_consumable, never the raw table.", flush=True)
     conn.close()
 
 

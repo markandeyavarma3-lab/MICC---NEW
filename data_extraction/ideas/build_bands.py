@@ -20,11 +20,14 @@ Idempotent: replaces the live band theses for the current card_date only.
 Run:  py -3.14 ideas/build_bands.py
 """
 import math
+import os
 
 from schema import connect, ensure_tables
 
 LIVE_TAG   = "live:momentum_bands"
-RISK_BUDGET = 10_000.0   # INR risk per idea (placeholder; sizing is equal-risk)
+# INR risk per idea (equal-risk sizing). Config via env so it can change without a
+# code edit mid-pipeline (reviewer #3). Default 10k.
+RISK_BUDGET = float(os.environ.get("MICC_RISK_BUDGET", "10000"))
 ADX_TREND  = 25.0        # ADX above this = trending -> positional
 K_SWING       = 1.75     # ATR multiplier, swing (conventional 1.5-2.0)
 K_POSITIONAL  = 2.75     # ATR multiplier, positional (conventional 2.5-3.0)

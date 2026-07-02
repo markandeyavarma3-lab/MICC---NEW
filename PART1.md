@@ -1,6 +1,7 @@
 # MICC — Part 1: Idea Engine & Foundation Hardening (As-Built Reference)
 
-**Status:** ✅ Complete · `verify_phases.py` **49/49 green** · branch `feat/part1-idea-engine`
+**Status:** ✅ Complete · `verify_phases.py` **51/51 green** · branch `feat/part1-idea-engine`
+(includes post-review hardening — see §9)
 **Date:** 2026-07 · **DB:** `D:\marketDB\db\market.db` (system-of-record) · **Interpreter:** `py -3.14`
 
 This is the **as-built** reference for Part 1 — what exists in the code and database
@@ -101,7 +102,11 @@ PK `(thesis_id, card_date, pillar)`. Makes every confidence number exactly repro
 ### 2.6 `index_membership` — named PIT index membership (Stage 1A)
 `index_name, symbol, effective_from, effective_to, method, confidence, fetched_at` ·
 PK `(index_name, symbol, effective_from)`. `effective_to IS NULL` = still a member.
-**9,346 rows** = 1,100 official-current + 8,246 reconstructed-historical.
+**14,150 rows** = 1,100 official-current + 13,050 reconstructed-historical (NIFTY 50/100/
+200/500). `confidence` is **measured** (= current turnover-topN agreement), not guessed.
+A companion **view `index_membership_consumable`** exposes only rows with
+`confidence ≥ 0.75` — the *only* membership Part 2 signals may join (weak narrow-index
+history is quarantined; see §9).
 
 ---
 
@@ -235,11 +240,13 @@ trust prior printouts). Part 1 grew it from 29 → **49** checks:
 
 | Phase | Checks | Covers |
 |---|---|---|
-| P1–P5 | 29 | existing: adj prices, PIT universe, ISIN, features (manual recompute), backtest |
-| **P6** | 7 | fundamentals as-of, index_membership intervals, NIFTY 50 current match, top-500 sector |
+| P1–P5 | 29 | existing: adj prices (cadence-robust, §9), PIT universe, ISIN, features, backtest |
+| **P6** | 9 | fundamentals as-of, membership intervals, NIFTY 50 match, top-500 sector, **consumable-view quarantine** |
 | **P7** | 3 | idea-engine backfill parity (exact) + no orphan trades |
 | **P8** | 5 | ATR band invariants (order, size, 2:1 RR, equal-risk, `atr_k`) |
 | **P9** | 5 | scoring reproducibility, weight integrity, A3 cap, degenerate-weights == generate_signals |
+
+**Total: 51/51.**
 
 ---
 
@@ -296,3 +303,34 @@ py -3.14 common\verify_phases.py                # 49/49 acceptance gate
 - **Part 3:** the Friday learning loop that proposes new `score_weights` versions (with
   per-cycle move caps), the risk meta-engine, and a **probationary** ML/CPCV overlay that
   only ships to live scoring if it beats the linear composite out-of-sample.
+
+---
+
+## 9. Post-review hardening (2026-07)
+
+Changes made in response to the Part-1 code review:
+
+1. **Membership consumption guard (review #1 — "0.60-confidence table shouldn't be
+   consumed").** Local free-float market-cap data is effectively absent
+   (`stock_fundamentals.marketCap` is empty), so the reviewer's option (a) — market-cap
+   reconstruction — isn't achievable. Instead:
+   - `confidence` is now **measured** per index (current turnover-topN agreement), not
+     guessed: NIFTY 50 = 58%, 100 = 63%, 200 = 80%, 500 = 78%.
+   - New view **`index_membership_consumable`** exposes only `confidence ≥ 0.75`. Part 2's
+     index-relative signals must join **the view, never the raw table** — so the weak
+     narrow-index history (2,903 rows) is structurally quarantined, not merely flagged.
+   - `verify_phases` P6 asserts the view leaks no `conf<0.75` row and still carries the
+     official current members.
+   - *Proper fix deferred:* swap in a real historical source (Figshare/Wikipedia NIFTY
+     change-log) when doing Part 2's index-relative signals — tracked as the upgrade path.
+2. **Risk budget is now config (review #3).** `build_bands.py` reads
+   `MICC_RISK_BUDGET` (env, default ₹10,000) so it can change without a code edit
+   mid-pipeline.
+3. **`regime_align` (review #2 — note only):** acknowledged that it currently double-counts
+   breadth (one of the 4-vote gate's inputs). Left as-is; Part 2 replaces it with the real
+   macro spine. **Do not tune weights before then.**
+4. **Cadence-robust adj check (found during review testing):** the daily raw update
+   legitimately runs ahead of the weekly `stock_data_adj` rebuild, which was making the
+   strict `n_adj == n_raw` check false-alarm daily. It now asserts adj *covers* raw within
+   its own date range (≤ 0.5% pending-rebuild tolerance) and never *exceeds* raw — strong
+   enough to catch real bugs, robust to the daily/weekly cadence.

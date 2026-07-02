@@ -36,9 +36,18 @@ def main():
     # ============ PHASE 1: stock_data_adj ============
     print("Verifying Phase 1: stock_data_adj ...", flush=True)
     check("stock_data_adj" in tables, "P1 stock_data_adj exists")
+    # adj is rebuilt WEEKLY while raw is updated DAILY, so between a daily fetch and the
+    # weekly adj rebuild raw legitimately leads adj (both by new dates and by symbols
+    # backfilled onto older dates). Assert adj covers raw within its own date range up to
+    # a tiny pending-rebuild tolerance, and that adj never EXCEEDS raw (phantom rows).
     n_adj = q("SELECT COUNT(*) FROM stock_data_adj")[0]
     n_raw = q("SELECT COUNT(*) FROM stock_data")[0]
-    check(n_adj == n_raw, "P1 adj row count == raw", f"adj={n_adj:,} raw={n_raw:,}")
+    adj_max = q("SELECT MAX(date) FROM stock_data_adj")[0]
+    n_raw_in_range = q("SELECT COUNT(*) FROM stock_data WHERE date<=?", (adj_max,))[0]
+    shortfall = n_raw_in_range - n_adj          # in-range raw rows adj hasn't picked up yet
+    ok = (n_adj <= n_raw) and (0 <= shortfall <= 0.005 * n_adj)
+    check(ok, "P1 adj covers raw within its date range (raw may lead; adj rebuild is weekly)",
+          f"adj={n_adj:,} raw={n_raw:,} in_range(<= {adj_max})={n_raw_in_range:,} shortfall={shortfall}")
     bad = q("SELECT COUNT(*) FROM stock_data_adj WHERE close<=0 OR close IS NULL "
             "OR open<=0 OR high<=0 OR low<=0")[0]
     check(bad == 0, "P1 no non-positive/NULL adj prices", f"bad={bad}")
@@ -236,6 +245,15 @@ def main():
                     "ON p.symbol=s.symbol WHERE p.rebal_date=? AND p.top500=1 "
                     "AND s.symbol IS NULL", (d_pu,))[0]
         check(sec_gap == 0, "P6 no NULL sector inside current top-500", f"gap={sec_gap}")
+        # consumable view must quarantine every low-confidence row (reviewer fix):
+        # nothing below 0.75 may leak through the view Part 2 signals join.
+        views = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='view'")}
+        if "index_membership_consumable" in views:
+            leak = q("SELECT COUNT(*) FROM index_membership_consumable WHERE confidence < 0.75")[0]
+            check(leak == 0, "P6 consumable view excludes conf<0.75 rows", f"leak={leak}")
+            offv = q("SELECT COUNT(*) FROM index_membership_consumable WHERE method='official'")[0]
+            check(offv > 0, "P6 consumable view still carries official current members", f"n={offv}")
     else:
         print("  (P6 membership tests skipped -- index_membership not built yet [Stage 1A])",
               flush=True)
