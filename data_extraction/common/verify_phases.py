@@ -345,6 +345,35 @@ def main():
                 check(consistent, "P10 spine ship verdict consistent with OOS Sharpe",
                       f"shipped={sv[0]} inc={sv[1]:.2f} spine={sv[2]:.2f}")
 
+    # ============ PHASE 11: event layer (Part 2 Module 2) ============
+    if "event_signals" in tables:
+        print("Verifying Phase 11: event layer ...", flush=True)
+        types = {r[0] for r in conn.execute("SELECT DISTINCT event_type FROM event_signals")}
+        need = {"insider_cluster_buy", "pledge_risk", "pead_proxy",
+                "buyback_announce", "index_inclusion"}
+        check(need <= types, "P11 all five event builders populated",
+              f"missing={need - types or 'none'}")
+        badd = q("SELECT COUNT(*) FROM event_signals WHERE event_date IS NULL "
+                 "OR LENGTH(event_date)!=10")[0]
+        check(badd == 0, "P11 event dates clean ISO", f"bad={badd}")
+        # tier honesty: the insider tier must equal the persisted event-study verdict,
+        # and 'scored' is only legal with t>=3 and positive mean (pre-registered rule)
+        if "event_validation" in tables:
+            v = q("SELECT verdict, t_stat, mean_ar, mean_ar_h2 FROM event_validation "
+                  "WHERE event_type='insider_cluster_buy' ORDER BY run_at DESC LIMIT 1")
+            tier = q("SELECT DISTINCT evidence_tier FROM event_signals "
+                     "WHERE event_type='insider_cluster_buy'")
+            if v and tier:
+                check(tier[0] == v[0], "P11 insider tier == event-study verdict",
+                      f"tier={tier[0]} verdict={v[0]}")
+                legal = (v[0] != "scored") or (v[1] >= 3.0 and v[2] > 0 and v[3] > 0)
+                check(legal, "P11 'scored' only with t>=3, mean>0, H2>0",
+                      f"t={v[1]:.2f} mean={v[2]*100:.2f}% h2={v[3]*100:.2f}%")
+        # risk events must never be bullish
+        badr = q("SELECT COUNT(*) FROM event_signals WHERE evidence_tier='risk' "
+                 "AND direction!='risk'")[0]
+        check(badr == 0, "P11 risk-tier events carry direction=risk", f"bad={badr}")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)
