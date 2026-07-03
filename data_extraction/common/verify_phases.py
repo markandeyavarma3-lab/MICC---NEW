@@ -486,6 +486,29 @@ def main():
                       "P14 event_score re-derives with STRICT event_date < card_date",
                       f"mismatches={bad14}/{len(syms14)}")
 
+    # ============ PHASE 15: exit calibration (Part 3 Module C) ============
+    if "exit_calibration" in tables and q("SELECT COUNT(*) FROM exit_calibration")[0] > 0:
+        print("Verifying Phase 15: exit calibration ...", flush=True)
+        nv = q("SELECT COUNT(DISTINCT variant) FROM exit_calibration")[0]
+        check(nv >= 5, "P15 exit study covers >=5 variants", f"variants={nv}")
+        # exactly one KEEP or ADOPT verdict; the rest rejected
+        nkeep = q("SELECT COUNT(*) FROM exit_calibration WHERE verdict IN ('KEEP','ADOPT')")[0]
+        check(nkeep == 1, "P15 exactly one winning verdict", f"winners={nkeep}")
+        # gate honesty: an ADOPT must satisfy the pre-registered rule vs current
+        ad = q("SELECT exp_r_train, exp_r_test, mfe_capture_test FROM exit_calibration "
+               "WHERE verdict='ADOPT'")
+        if ad:
+            cur = q("SELECT exp_r_train, exp_r_test FROM exit_calibration "
+                    "WHERE variant='current'")
+            check(ad[0] > cur[0] and ad[1] > cur[1] and ad[2] >= 0.60,
+                  "P15 ADOPT satisfies train+test+MFEcap gate",
+                  f"adopt_test={ad[1]} cur_test={cur[1]} cap={ad[2]}")
+        # any adoption must be logged for human approval, never silently applied
+        if ad:
+            lg = q("SELECT COUNT(*) FROM rule_change_log WHERE component='atr' "
+                   "AND approved_by='PENDING'")[0]
+            check(lg > 0, "P15 adopted variant awaits human approval in rule_change_log")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)
