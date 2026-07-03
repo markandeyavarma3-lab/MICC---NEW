@@ -179,6 +179,8 @@ WEEKLY_PHASES = [
     ("screener_pit",   "events/integrate_screener_pit.py",     "Screener PIT-tag + depth (cap-lift OFF)", None, 600),
     ("prereg",         "common/preregister_signals.py",        "Signal pre-registration governance",    None, 120),
     ("weekly_review",  "ideas/weekly_review.py",               "Friday learning loop (monitor-only)",   None, 600),
+    ("exit_recal",     "common/calibrate_exits.py",            "Quarterly exit re-calibration (auto-gated)", ["--auto"], 900),
+    ("ml_gate",        "common/ml_cpcv_harness.py",            "Quarterly ML/CPCV challenger re-run (auto-gated)", ["--auto"], 1800),
     ("db_backup",      "../automation/backup_db.py",           "VACUUM INTO backup + integrity check",  None, 2700),
     ("alphavantage",   "events/fetch_alphavantage.py",         "AlphaVantage US earnings/holdings/insider", None, 300),
     # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---

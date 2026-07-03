@@ -28,19 +28,33 @@ def tail(path, n=25):
 
 
 def notify(job, code, log):
+    """Failure alert. Two transports, tried in order:
+    MICC_ALERT_WEBHOOK  Slack/Discord-style JSON webhook (if set)
+    MICC_NTFY_TOPIC     zero-signup push via https://ntfy.sh/<topic>
+                        (subscribe in the ntfy mobile/desktop app)"""
+    text = (f"MICC pipeline '{job}' FAILED (exit {code})\n\n{tail(log, 15)}")
     url = os.environ.get("MICC_ALERT_WEBHOOK")
-    if not url:
-        return "no-webhook"
-    text = (f":rotating_light: MICC pipeline *{job}* FAILED (exit {code})\n"
-            f"```\n{tail(log, 20)}\n```")
-    try:
-        req = urllib.request.Request(
-            url, data=json.dumps({"text": text}).encode(),
-            headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=15)
-        return "sent"
-    except Exception as e:
-        return f"alert-failed:{str(e)[:60]}"
+    if url:
+        try:
+            req = urllib.request.Request(
+                url, data=json.dumps({"text": text}).encode(),
+                headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=15)
+            return "sent-webhook"
+        except Exception as e:
+            return f"webhook-failed:{str(e)[:60]}"
+    topic = os.environ.get("MICC_NTFY_TOPIC")
+    if topic:
+        try:
+            req = urllib.request.Request(
+                f"https://ntfy.sh/{topic}", data=text.encode(),
+                headers={"Title": f"MICC {job} FAILED",
+                         "Priority": "high", "Tags": "rotating_light"})
+            urllib.request.urlopen(req, timeout=15)
+            return "sent-ntfy"
+        except Exception as e:
+            return f"ntfy-failed:{str(e)[:60]}"
+    return "no-webhook"
 
 
 def main():

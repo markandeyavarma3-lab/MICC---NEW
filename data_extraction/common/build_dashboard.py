@@ -105,11 +105,27 @@ def main():
         recs, rtr = pd.DataFrame(), (0, 0, 0)
     try:
         ideas = pd.read_sql("SELECT symbol,company,sector,timeframe_class,entry,stop,target,"
-                            "rr_ratio,size_shares,confidence_score,pillar_json FROM idea_card "
+                            "rr_ratio,size_shares,confidence_score,pillar_json,context_json,"
+                            "in_book FROM idea_card "
                             "WHERE card_date=(SELECT MAX(card_date) FROM idea_card) "
                             "ORDER BY confidence_score DESC LIMIT 15", conn)
     except Exception:
         ideas = pd.DataFrame()
+    try:
+        riskrow = conn.execute(
+            "SELECT as_of_date, equity, drawdown_pct, consec_losses, risk_budget_mult, "
+            "halt_new_cards, avg_pairwise_corr, regime_votes, sector_concentration_json "
+            "FROM risk_state_daily ORDER BY as_of_date DESC LIMIT 1").fetchone()
+    except Exception:
+        riskrow = None
+    try:
+        wr = conn.execute("SELECT narrative_md FROM weekly_review "
+                          "ORDER BY review_id DESC LIMIT 1").fetchone()
+        weights_hist = pd.read_sql(
+            "SELECT version, pillar, weight FROM score_weights "
+            "WHERE pillar NOT LIKE '\\_%' ESCAPE '\\' ORDER BY version, pillar", conn)
+    except Exception:
+        wr, weights_hist = None, pd.DataFrame()
     bdate, votes, score = regime(conn)
     conn.close()
 
@@ -198,16 +214,61 @@ def main():
                 return ", ".join(f'{k.split("_")[0]} {v["contribution"]:+.0f}' for k, v in top)
             except Exception:
                 return ""
+
+        def _ctx(cj):
+            try:
+                d = _json.loads(cj or "{}")
+                bits = []
+                if "sector_rrg" in d:
+                    bits.append(d["sector_rrg"].split(" (")[0])
+                bits += [k.replace("_", " ") for k in d if k not in
+                         ("regime_spine", "sector_rrg")]
+                return ", ".join(bits[:3])
+            except Exception:
+                return ""
         ideas["why"] = ideas["pillar_json"].map(_why)
+        ideas["ctx"] = ideas["context_json"].map(_ctx)
+        ideas["bk"] = ideas["in_book"].map(lambda x: "✓" if x else "wait")
         idd = ideas[["symbol", "timeframe_class", "entry", "stop", "target", "rr_ratio",
-                     "size_shares", "confidence_score", "why"]].copy()
-        idd.columns = ["Symbol", "Frame", "Entry", "Stop", "Target", "R:R", "Size", "Conf", "Why (top pillars)"]
+                     "size_shares", "confidence_score", "why", "ctx", "bk"]].copy()
+        idd.columns = ["Symbol", "Frame", "Entry", "Stop", "Target", "R:R", "Size",
+                       "Conf", "Why (top pillars)", "Context", "Book"]
         idea_tbl = table(idd, {
             "Entry": lambda x: f"₹{x:,.0f}", "Stop": lambda x: f"₹{x:,.0f}",
             "Target": lambda x: f"₹{x:,.0f}", "R:R": lambda x: f"{x:.1f}",
             "Size": lambda x: f"{int(x)}", "Conf": lambda x: f"{x:.0f}"})
     else:
         idea_tbl = "<p>Run <code>ideas/build_idea_cards.py</code> to populate.</p>"
+
+    # --- risk meta-engine panel ---
+    if riskrow:
+        _, req, rdd, rcl, rmult, rhalt, rcorr, rvotes, rconc = riskrow
+        import json as _json2
+        conc = _json2.loads(rconc or "{}")
+        top_conc = ", ".join(f"{k} {v*100:.0f}%" for k, v in list(conc.items())[:4])
+        risk_cards = (
+            card("Desk R-PnL", f"₹{req/1e5:.1f}L", "cumulative, R-based") +
+            card("Drawdown", f"{rdd*100:.1f}%", "brake at 10/15/22%") +
+            card("Risk budget", f"×{rmult}", "HALTED" if rhalt else "normal") +
+            card("Loss streak", f"{rcl}", "brake at 3") +
+            card("Holdings corr", "n/a" if rcorr is None else f"{rcorr:.2f}", "throttle >0.6"))
+        risk_html = (f'<div class="cards">{risk_cards}</div>'
+                     f'<div style="color:#64748b;font-size:11px;margin-top:6px">'
+                     f'Sector exposure: {top_conc or "n/a"} · governance only, not alpha</div>')
+    else:
+        risk_html = "<p>Run <code>common/build_risk_state.py</code> to populate.</p>"
+
+    # --- weekly review + weight evolution ---
+    review_html = ""
+    if wr and wr[0]:
+        body = wr[0].replace("# ", "").replace("*", "").replace("\n", "<br>")
+        review_html = f'<div style="font-size:13px;color:#cbd5e1;line-height:1.6">{body}</div>'
+    if len(weights_hist):
+        wp = weights_hist.pivot(index="pillar", columns="version", values="weight").reset_index()
+        wp.columns.name = None
+        review_html += "<h3 style='font-size:13px;color:#94a3b8;margin-top:14px'>Weight evolution (versioned)</h3>"
+        review_html += table(wp, {c: (lambda x: "" if pd.isna(x) else f"{x:+.2f}")
+                                  for c in wp.columns if c != "pillar"})
 
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>MICC Dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -268,7 +329,10 @@ padding:10px 14px;border-radius:8px;margin:0 0 18px}}
 <div style="margin-top:12px">{rec_tbl}</div>
 <div style="color:#64748b;font-size:11px;margin-top:6px">Calls are logged, then scored after their duration vs the real price path → the feedback loop that improves the model. Research only, not advice.</div>
 
-<h2>Idea Cards — ATR bands · auto timeframe · 6-pillar confidence</h2>
+<h2>Risk Meta-Engine — drawdown/streak brakes · concentration</h2>
+{risk_html}
+
+<h2>Idea Cards — ATR bands · auto timeframe · 7-pillar confidence</h2>
 {idea_tbl}
 <div style="color:#64748b;font-size:11px;margin-top:6px">Entry/stop/target from ATR-14 (swing 1.75× · positional 2.75×), equal rupee-risk sizing. Confidence = transparent linear composite of 6 pillars; "Why" shows the two largest contributions. Full audit via <code>/api/thesis/&lt;id&gt;</code>.</div>
 
@@ -277,6 +341,9 @@ padding:10px 14px;border-radius:8px;margin:0 0 18px}}
 
 <h2>Top Equity Funds (Direct Growth, by 3y Sharpe)</h2>
 {fund_tbl}
+
+<h2>Friday Learning Loop — latest review &amp; weight evolution</h2>
+{review_html or '<p>Runs Fridays (weekly pipeline).</p>'}
 
 <h2>Smart Money — Insider Cluster-Buys &amp; Bulk-Deal Accumulation</h2>
 {deals_tbl}

@@ -15,7 +15,48 @@
 - 📈 **Products**: live signal generator, equity-fund scorecard (847 funds), self-contained dashboard.
 
 **Key docs:** [📄 Research paper](RESEARCH.md) · [🧭 Analysis blueprint](MICC_BLUEPRINT.md) ·
+[🏗️ Part 1](PART1.md) · [📡 Part 2](PART2.md) · [🔁 Part 3](PART3.md) · [🛟 DR runbook](docs/DR_RUNBOOK.md) ·
 [📊 Dashboard](MICC_dashboard.html) (open in a browser) · run `py -3.14 common/verify_phases.py` to audit.
+
+---
+
+## Progress log
+
+### 2026-07-03 · 19:30 IST — Parts 1–3 built; hardening sweep done; 98/98 verified
+
+**Where the system stands right now**
+- **Idea desk live**: 46 idea cards (₹1cr book, ₹70.9L deployed), ATR bands (stop ≤10%),
+  7-pillar auditable confidence (v2.0), portfolio caps, risk meta-engine (DD/streak brakes,
+  currently mult ×1.0, DD 3.9%, +₹4.67L cum R-pnl on 540 closed trades).
+- **Verdict-driven research**: every challenger pre-registered; regime spine NO-SHIP
+  (1.42 vs 1.53), amihud/rs-sector failed IC gates, ridge & LightGBM KILLED under CPCV
+  (0.61/0.80 vs champion 1.00). **Only insider cluster buys earned weight** (+2.97% 21d AR,
+  t=3.67). Exit-band study on our own 540 trades: whipsaw falsified (1%), KEEP bands.
+- **Self-governing**: Friday loop (monitor-only, 0 proposals — sample gates hold),
+  weekly integrity-checked backups (18.7GB, restore drill PASS) + secondary copy on C:,
+  quarterly auto-gated re-calibrations, failure alerts via ntfy
+  (topic `micc-alerts-iy1e2gza3p` — subscribe in the ntfy app), runtime-headroom monitor.
+- **Fundamentals depth staged**: 12yr screener history PIT-tagged (FY-end+60d, flagged
+  estimated), 356 symbols cap-lift-eligible — **cap stays ON** until the value re-backtest clears.
+- **NIFTY 50 named history**: real niftyindices data 2008→2025 (conf 1.0) + Wikipedia-bridged
+  Sep-2025 reshuffle to present (conf 0.95, 96% validated vs official).
+
+**Fixed today (hardening sweep):** ntfy failure alerts wired + tested · secondary backup on
+C: (quick_check ok) · quarterly auto-gates for exit/ML re-runs · log rotation (60d) ·
+`requirements-lock.txt` (186 pins) · DR runbook (`docs/DR_RUNBOOK.md`) · dashboard risk-state +
+weekly-review + context-tag + weight-evolution panels · 6 tight phase timeouts raised ·
+NIFTY 50 vendor-lag gap bridged.
+
+**Open items (honest):**
+1. **Value/quality re-backtest on extended PIT history** → the only path to lifting the ≤70
+   confidence cap. Biggest remaining job (next session).
+2. **10-green-runs acceptance gate**: streak **0/10** — tonight's daily and Friday's weekly
+   are the first runs exercising everything under the scheduler.
+3. Time-gated: event-thesis promotion (~mid-2027), true PEAD (needs ≥12 qtrs, ~2028),
+   learning-loop weight proposals (needs ≥30 closed scored trades/pillar), live capital
+   (12–18mo paper record + Kite static IP).
+4. Consciously closed — do not reopen without new evidence: spine/amihud/rs-sector/ML as
+   scored signals, F&O signals, calendar effects, sector tail coverage (~60% by design).
 
 ---
 

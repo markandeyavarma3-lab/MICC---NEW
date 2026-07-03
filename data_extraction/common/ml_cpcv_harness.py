@@ -91,11 +91,19 @@ def top_decile_series(df_test, score_col):
 
 
 def main():
+    import sys
     import lightgbm as lgb
     conn = sqlite3.connect(DB_PATH, timeout=300)
     conn.execute("PRAGMA busy_timeout=300000")
     for d in DDL:
         conn.execute(d)
+    # --auto (pipeline mode): quarterly cadence — self-skip if last run < 80 days ago
+    if "--auto" in sys.argv:
+        last = conn.execute("SELECT MAX(created_at) FROM ml_experiment").fetchone()[0]
+        if last and (datetime.now() - datetime.fromisoformat(last)).days < 80:
+            print(f"  quarterly gate: last run {last[:10]}, skipping (auto mode)", flush=True)
+            conn.close()
+            return
 
     df = pd.read_sql("SELECT rebal_date, symbol, fwd_ret_1m, " + ",".join(FEATURES) +
                      " FROM features_monthly WHERE top500=1 AND liquid=1 "

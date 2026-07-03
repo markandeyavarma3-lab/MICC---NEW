@@ -20,6 +20,9 @@ from pathlib import Path
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
 BACKUP_DIR = Path(r"D:\marketDB\backups")
+# second location on a DIFFERENT drive: D: dying must not take the backups with it.
+# C: has ~42GB free -> exactly ONE secondary copy is kept (newest).
+SECONDARY_DIR = Path(os.environ.get("MICC_BACKUP_SECONDARY", r"C:\MICC_backups"))
 KEEP_WEEKLY = 2
 KEEP_MONTHLY = 2
 KEY_TABLES = ["stock_data", "stock_data_adj", "recommendations", "thesis",
@@ -110,7 +113,27 @@ def backup():
         if b not in keep:
             b.unlink()
             print(f"  pruned {b.name}", flush=True)
-    log_monitor("OK", f"{dest.name} {size:.1f}GB ic=ok kept={len(keep)}")
+
+    # secondary copy on the other drive (newest only; skip if space is short)
+    sec = "skipped"
+    try:
+        import shutil
+        free = shutil.disk_usage(SECONDARY_DIR.anchor).free
+        if free > dest.stat().st_size * 1.1:
+            SECONDARY_DIR.mkdir(parents=True, exist_ok=True)
+            for old in SECONDARY_DIR.glob("market_*.db"):
+                old.unlink()
+            shutil.copy2(dest, SECONDARY_DIR / dest.name)
+            sc = sqlite3.connect(f"file:{SECONDARY_DIR / dest.name}?mode=ro", uri=True)
+            sec_ic = sc.execute("PRAGMA quick_check").fetchone()[0]
+            sc.close()
+            sec = f"copied ic={sec_ic}"
+        else:
+            sec = f"no-space ({free/1e9:.0f}GB free)"
+    except Exception as e:
+        sec = f"failed:{str(e)[:50]}"
+    print(f"  secondary copy ({SECONDARY_DIR}): {sec}", flush=True)
+    log_monitor("OK", f"{dest.name} {size:.1f}GB ic=ok kept={len(keep)} secondary={sec}")
     return 0
 
 

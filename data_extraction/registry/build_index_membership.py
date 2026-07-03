@@ -86,6 +86,46 @@ def reconstruct_intervals(pu, index_name, topn, conf, cutoff, now):
     return out
 
 
+# Bridge for the niftyindices vendor lag (data ends 2025-08-31; official snapshot
+# is 2026-06). Source: Wikipedia NIFTY 50 "Index changes" table — the ONLY
+# reconstitution in the gap window. Verified against the official current list.
+WIKI_BRIDGE = [
+    {"date": "2025-09-30",
+     "add": ["INDIGO", "MAXHEALTH"],
+     "remove": ["INDUSINDBK", "HEROMOTOCO"]},
+]
+BRIDGE_CONF = 0.95
+
+
+def apply_wiki_bridge(rows, data_end, cutoff, now):
+    """Extend niftyindices intervals across the vendor-lag gap using the
+    Wikipedia changelog. Members at data_end are carried to `cutoff`, minus
+    removals and plus additions at each change date."""
+    out = []
+    current = set()
+    for idx, sym, f, t, meth, c, ts in rows:
+        if t == data_end:                     # still a member when the data ends
+            current.add(sym)
+        out.append([idx, sym, f, t, meth, c, ts])
+    for chg in sorted(WIKI_BRIDGE, key=lambda x: x["date"]):
+        for sym in chg["remove"]:
+            if sym in current:
+                current.discard(sym)
+                for r in out:                 # close their open-ended interval
+                    if r[1] == sym and r[3] == data_end:
+                        r[3] = chg["date"]
+        for sym in chg["add"]:
+            current.add(sym)
+            out.append(["NIFTY 50", sym, chg["date"], cutoff,
+                        "wikipedia_changelog", BRIDGE_CONF, now])
+    for r in out:                             # survivors carry to the cutoff
+        if r[3] == data_end and r[1] in current:
+            r[3] = cutoff
+            r[5] = min(r[5], BRIDGE_CONF)     # bridged tail is 0.95, not 1.0
+            r[4] = "niftyindices+wiki_bridge"
+    return [tuple(r) for r in out], current
+
+
 def load_niftyindices_nifty50(now):
     """Build NIFTY 50 membership intervals from the official niftyindices weights
     matrix (weight>0 => member that month). Returns rows or [] if the CSV is absent."""
@@ -144,6 +184,15 @@ def main():
     ni_rows = load_niftyindices_nifty50(now)
     recon_indices = dict(RECON_TOPN)
     if ni_rows:
+        data_end = max(r[3] for r in ni_rows if r[3])        # niftyindices last month
+        ni_rows, bridged = apply_wiki_bridge(ni_rows, data_end, cutoff, now)
+        # validation: bridged membership at the cutoff must equal the official list
+        off_now = {s for s, in conn.execute("SELECT symbol FROM index_constituents "
+                                            "WHERE index_name='NIFTY 50'")}
+        agree = len(bridged & off_now) / len(off_now) if off_now else 0
+        print(f"  wiki-bridge {data_end} -> {cutoff}: {len(bridged)} members, "
+              f"{agree:.0%} match vs official "
+              f"({'PASS' if agree >= 0.96 else 'MISMATCH -- inspect'})", flush=True)
         ni_rows = [r for r in ni_rows if r[2] != cutoff]     # no PK clash with official
         conn.executemany("INSERT OR REPLACE INTO index_membership VALUES (?,?,?,?,?,?,?)", ni_rows)
         hist_n += len(ni_rows)

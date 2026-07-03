@@ -119,10 +119,18 @@ def variant_levels(entry, stop, variant):
 
 
 def main():
+    import sys
     conn = sqlite3.connect(DB_PATH, timeout=300)
     conn.execute("PRAGMA busy_timeout=300000")
     for d in DDL:
         conn.execute(d)
+    # --auto (pipeline mode): quarterly cadence — self-skip if last run < 80 days ago
+    if "--auto" in sys.argv:
+        last = conn.execute("SELECT MAX(run_at) FROM exit_calibration").fetchone()[0]
+        if last and (datetime.now() - datetime.fromisoformat(last)).days < 80:
+            print(f"  quarterly gate: last run {last[:10]}, skipping (auto mode)", flush=True)
+            conn.close()
+            return
 
     trades = load_trades(conn)
     paths = load_paths(conn, trades["symbol"].unique().tolist())

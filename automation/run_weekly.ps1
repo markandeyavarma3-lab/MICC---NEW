@@ -1,6 +1,6 @@
 # run_weekly.ps1 - MICC weekly pipeline wrapper (Task Scheduler entry point).
 # Runs run_pipeline.py --weekly (fundamentals, registries, index membership,
-# backtest rebuild, etc.), tees a log, records a heartbeat + failure alert.
+# backtest rebuild, backups etc.), tees a log, records a heartbeat + failure alert.
 
 $ErrorActionPreference = 'Continue'
 $repoRoot = 'D:\MICC'
@@ -18,4 +18,8 @@ py -3.14 run_pipeline.py --weekly | Tee-Object -FilePath $log
 $code = $LASTEXITCODE
 
 py -3.14 (Join-Path $repoRoot 'automation\heartbeat.py') --job weekly --exit $code --log $log
+
+# log rotation: prune pipeline logs older than 60 days
+Get-ChildItem $logDir -Filter *.log | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-60) } | Remove-Item -Force -ErrorAction SilentlyContinue
+
 exit $code
