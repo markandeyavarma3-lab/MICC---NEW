@@ -86,6 +86,16 @@ def main():
         conn.commit()
 
     regime_json = regime_snapshot(cur, card_date)   # one snapshot per card_date
+
+    # Part 3 Module B: risk meta-engine sizing multiplier (governance, never >1)
+    rs = cur.execute("SELECT risk_budget_mult FROM risk_state_daily "
+                     "ORDER BY as_of_date DESC LIMIT 1").fetchone() \
+        if cur.execute("SELECT name FROM sqlite_master WHERE name='risk_state_daily'").fetchone() \
+        else None
+    risk_mult = min(rs[0], 1.0) if rs and rs[0] else 1.0
+    risk_budget = RISK_BUDGET * risk_mult
+    if risk_mult < 1.0:
+        print(f"  risk meta-engine: budget x{risk_mult} -> Rs {risk_budget:,.0f}/idea", flush=True)
     made = skipped = 0
     for symbol, company, score, atr_pct, adx, above_pct in book:
         atr_frac = (atr_pct or 0) / 100.0            # percent -> fraction
@@ -108,7 +118,7 @@ def main():
             skipped += 1
             continue
         target = round(entry + R_MULTIPLE * stop_dist, 2)
-        size = int(math.floor(RISK_BUDGET / stop_dist))
+        size = int(math.floor(risk_budget / stop_dist))
         # concentration cap: a single position can't exceed MAX_POSITION_PCT of capital
         size = min(size, int(math.floor(MAX_POSITION_PCT * CAPITAL / entry)))
         if size < 1 or not (stop < entry < target):

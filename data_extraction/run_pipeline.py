@@ -153,6 +153,7 @@ DAILY_PHASES = [
     ("signals",     "common/generate_signals.py",              "Live top-decile book + 4-vote regime",  None, 300),
     ("recos",       "common/recommendations.py",               "Stock recos (entry/target/stop) + score", None, 600),
     ("rec_sync",    "ideas/backfill_recommendations.py",       "Sync legacy recs -> thesis/trade mirror", None, 300),
+    ("risk_state",  "common/build_risk_state.py",              "Risk meta-engine (DD/streak/concentration)", None, 300),
     ("idea_cards",  "ideas/build_idea_cards.py",               "Idea Engine: ATR bands + 6-pillar scoring + cards", None, 600),
     ("intel",       "common/build_market_intel.py",            "Deals + F&O positioning intel",         None, 300),
     ("dashboard",   "common/build_dashboard.py",               "Build self-contained HTML dashboard",   None, 300),

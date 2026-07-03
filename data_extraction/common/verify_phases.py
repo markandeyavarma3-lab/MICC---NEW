@@ -509,6 +509,30 @@ def main():
                    "AND approved_by='PENDING'")[0]
             check(lg > 0, "P15 adopted variant awaits human approval in rule_change_log")
 
+    # ============ PHASE 16: risk meta-engine (Part 3 Module B) ============
+    if "risk_state_daily" in tables and q("SELECT COUNT(*) FROM risk_state_daily")[0] > 0:
+        print("Verifying Phase 16: risk meta-engine ...", flush=True)
+        rsrow = q("SELECT drawdown_pct, consec_losses, dd_mult, streak_mult, "
+                  "risk_budget_mult, halt_new_cards FROM risk_state_daily "
+                  "ORDER BY as_of_date DESC LIMIT 1")
+        dd16, cl16, dm16, sm16, m16, h16 = rsrow
+        # threshold re-derivation (the exact rule table)
+        exp_dm = 1.0 if dd16 < 0.10 else 0.75 if dd16 < 0.15 else 0.50 if dd16 < 0.22 else 0.25
+        exp_sm = 0.75 if cl16 >= 3 else 1.0
+        check(abs(dm16 - exp_dm) < 1e-9, "P16 dd_mult re-derives from thresholds",
+              f"dd={dd16:.3f} stored={dm16} expect={exp_dm}")
+        check(abs(sm16 - exp_sm) < 1e-9, "P16 streak_mult re-derives from rule",
+              f"streak={cl16} stored={sm16} expect={exp_sm}")
+        check(abs(m16 - min(dm16, sm16, 1.0)) < 1e-9 and m16 <= 1.0,
+              "P16 combined mult = min(brakes), never > 1", f"mult={m16}")
+        check((h16 == 1) == (dd16 >= 0.22), "P16 halt iff DD >= 22%",
+              f"dd={dd16:.3f} halt={h16}")
+        # halt enforcement: while halted, no in-book cards on the latest card date
+        if h16 == 1:
+            nb = q("SELECT COUNT(*) FROM idea_card WHERE in_book=1 AND "
+                   "card_date=(SELECT MAX(card_date) FROM idea_card)")[0]
+            check(nb == 0, "P16 halt blocks all in-book cards", f"in_book={nb}")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)

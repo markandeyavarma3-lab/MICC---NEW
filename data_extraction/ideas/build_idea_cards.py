@@ -28,6 +28,15 @@ def materialise(conn, card_date):
         "h.status FROM thesis h WHERE h.narrative='live:momentum_bands' AND h.created_at=? "
         "ORDER BY h.confidence_score DESC", (card_date,)).fetchall()
 
+    # Part 3 Module B: drawdown HALT (DD>22%) -> no new in-book cards while halted
+    halted = cur.execute("SELECT halt_new_cards FROM risk_state_daily "
+                         "ORDER BY as_of_date DESC LIMIT 1").fetchone() \
+        if cur.execute("SELECT name FROM sqlite_master WHERE name='risk_state_daily'").fetchone() \
+        else None
+    halted = bool(halted[0]) if halted else False
+    if halted:
+        print("  RISK HALT active (DD>22%): all new cards go to waitlist", flush=True)
+
     made = 0
     cum_notional = 0.0          # portfolio-level capital cap: total deployed <= CAPITAL
     for tid, sym, ttype, tf, conf, status in live:
@@ -39,8 +48,9 @@ def materialise(conn, card_date):
         entry, stop, target, size = tr
         rr = round((target - entry) / (entry - stop), 2) if entry and entry != stop else None
         notional = round((size or 0) * entry, 2)
-        # include this idea only if it still fits under the capital cap (highest conf first)
-        in_book = 1 if (cum_notional + notional) <= CAPITAL else 0
+        # include this idea only if it still fits under the capital cap (highest conf
+        # first) AND the risk meta-engine has not halted new cards
+        in_book = 1 if (not halted and (cum_notional + notional) <= CAPITAL) else 0
         if in_book:
             cum_notional += notional
         company = cur.execute("SELECT company FROM current_signals WHERE symbol=? "
