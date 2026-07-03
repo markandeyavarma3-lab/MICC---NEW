@@ -117,9 +117,11 @@ def event_subscores(conn, card_date, symbols):
     d0 = _dt.date.fromisoformat(card_date)
     ev, pledge = {}, set()
     qmarks = ",".join("?" * len(symbols))
+    # STRICT '<': an event filed ON card_date cannot influence that date's score
+    # (EOD system — the card is built at that close; same-day info is a PIT leak)
     for sym, ed, etype, direction, horizon, tier in conn.execute(
             f"SELECT symbol,event_date,event_type,direction,decay_horizon_days,evidence_tier "
-            f"FROM event_signals WHERE symbol IN ({qmarks}) AND event_date<=? "
+            f"FROM event_signals WHERE symbol IN ({qmarks}) AND event_date<? "
             f"AND evidence_tier IN ('scored','risk')", (*symbols, card_date)):
         age = (d0 - _dt.date.fromisoformat(ed)).days
         if age > (horizon or 63):

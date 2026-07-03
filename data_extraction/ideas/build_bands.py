@@ -19,6 +19,7 @@ Bands:
 Idempotent: replaces the live band theses for the current card_date only.
 Run:  py -3.14 ideas/build_bands.py
 """
+import json
 import math
 import os
 
@@ -40,6 +41,24 @@ MAX_ATR_FRAC = 0.9       # guard: skip pathological ATR that would push stop<=0
 def classify(adx, above_200):
     strong = (adx is not None and adx >= ADX_TREND) and bool(above_200)
     return ("positional", K_POSITIONAL) if strong else ("swing", K_SWING)
+
+
+def regime_snapshot(cur, card_date):
+    """Full regime state at thesis creation, as JSON: the VALIDATED 4-vote gate
+    plus the Part-2 multi-axis spine vector (context). Part 3's learning loop
+    needs this per-thesis for regime attribution — do not thin it out."""
+    from scoring import regime_votes
+    votes = regime_votes(cur.connection, card_date)
+    snap = {"votes": votes, "gate": f"{'RISK-ON' if votes >= 2 else 'RISK-OFF'} {votes}/4"}
+    row = cur.execute(
+        "SELECT regime_score, regime_label, risk_axis, vol_axis, fx_axis, "
+        "commodity_axis, rates_axis, flow_axis FROM regime_daily "
+        "WHERE date<=? ORDER BY date DESC LIMIT 1", (card_date,)).fetchone()
+    if row:
+        snap["spine"] = {"score": row[0], "label": row[1],
+                         "axes": {"risk": row[2], "vol": row[3], "fx": row[4],
+                                  "commodity": row[5], "rates": row[6], "flow": row[7]}}
+    return json.dumps(snap)
 
 
 def main():
@@ -66,6 +85,7 @@ def main():
         cur.execute(f"DELETE FROM thesis WHERE thesis_id IN ({qm})", old)
         conn.commit()
 
+    regime_json = regime_snapshot(cur, card_date)   # one snapshot per card_date
     made = skipped = 0
     for symbol, company, score, atr_pct, adx, above_pct in book:
         atr_frac = (atr_pct or 0) / 100.0            # percent -> fraction
@@ -100,7 +120,7 @@ def main():
             "timeframe_class,regime_at_creation,confidence_score,weight_version,"
             "narrative,status,invalidation_condition,closed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (card_date, symbol, "momentum", "momentum_delivery_lowvol", tf, None,
+            (card_date, symbol, "momentum", "momentum_delivery_lowvol", tf, regime_json,
              score, None, LIVE_TAG, "active",
              f"close below stop {stop}", None))
         tid = cur.lastrowid

@@ -93,7 +93,39 @@ one-time cleanup of 276 orphans).
 - Buyback/announcement history is ~1 month deep locally; the builder is correct but
   starving until `corporate_announcements` accumulates.
 
-## 7. Deferred to Part 3
+## 7. Post-review hardening (2026-07-03)
+
+Six reviewer items, all closed (verify suite 72 → **79 checks**):
+
+1. **Heartbeat streak in `status.py`** — already existed (prints `x/10` vs the gate).
+2. **`regime_at_creation` was NULL** (worse than the stale-format the reviewer
+   suspected). Every new thesis now snapshots the full regime state as JSON:
+   validated 4-vote gate **and** all six spine axes — Part 3's regime-attribution
+   analysis gets clean data from today forward.
+3. **Timeout policy**: every pipeline phase now logs its runtime to
+   `monitoring_log` (`phase_runtime:*`), and `status.py` flags any phase whose
+   observed max exceeds ⅓ of its cap with a suggested 3× cap — timeout creep is
+   self-reporting instead of streak-resetting.
+4. **Pre-registration** (`common/preregister_signals.py` → `signal_preregistration`):
+   10 signals registered with test window, pass threshold and kill criteria; the
+   file is the registry's only writer (amendments live in git). P14 enforces:
+   scored ⇒ prereg row exists ∧ persisted validation meets the registered
+   thresholds; killed signals can never hold weight. Post-hoc promotion is closed.
+5. **Same-day PIT leak closed**: event influence now requires strict
+   `event_date < card_date` (scoring + context tags); P14 re-derives event
+   subscores under the strict rule and asserts zero mismatches.
+6. **Bera membership confirmed underneath**: P6 now asserts NIFTY 50 history has
+   **zero** turnover-proxy rows (108 `niftyindices_official` intervals, conf 1.0).
+
+**Module 6a split (the reviewer's top item)**: fetcher built NOW, integration
+deferred. `events/fetch_screener_fundamentals.py` collects ~12 fiscal years
+(FY2015→FY2026, EPS included) of annual P&L per top-500 name from screener.in —
+rate-limited (~3s+jitter), resumable, raw-only storage (`screener_raw` +
+`screener_annual`). **Nothing touches fundamentals_pit or value scoring** until
+Part 3's restated-vs-PIT verification pass; wired as a weekly background phase.
+This is the depth that eventually unbinds the value/quality ≤70 cap.
+
+## 8. Deferred to Part 3
 
 Friday learning loop (proposes `score_weights` v2.x with per-cycle move caps), risk
 meta-engine, ATR-k re-calibration on closed trades, ML/CPCV probationary overlay,

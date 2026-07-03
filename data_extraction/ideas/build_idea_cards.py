@@ -66,7 +66,7 @@ def materialise(conn, card_date):
                 ctx["sector_rrg"] = f"{sq[0]} (breadth {sq[1]:.0f}%)"
         for et, ed in cur.execute(
                 "SELECT event_type,MAX(event_date) FROM event_signals WHERE symbol=? "
-                "AND event_date<=? AND evidence_tier='context' "
+                "AND event_date<? AND evidence_tier='context' "
                 "AND julianday(?)-julianday(event_date)<=decay_horizon_days "
                 "GROUP BY event_type", (sym, card_date, card_date)):
             ctx[et] = ed

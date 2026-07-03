@@ -46,11 +46,25 @@ def clean_env():
     return env
 
 
+def log_runtime(name, ok, elapsed, timeout):
+    """Persist per-phase runtime to monitoring_log so timeout headroom is
+    self-reporting (status.py flags phases creeping past 1/3 of their cap)."""
+    try:
+        import sqlite3
+        c = sqlite3.connect(r"D:\marketDB\db\market.db", timeout=30)
+        c.execute("INSERT INTO monitoring_log VALUES (?,?,?,?)",
+                  (datetime.now().isoformat(), f"phase_runtime:{name}",
+                   "OK" if ok else "FAIL", f"{elapsed:.0f}s / cap {timeout}s"))
+        c.commit(); c.close()
+    except Exception:
+        pass
+
+
 def run(script_rel, desc, args=None, timeout=1800):
     script_path = PIPELINE_DIR / script_rel
     if not script_path.exists():
         log(f"{desc}: script not found ({script_rel})", "FAIL")
-        return False
+        return False, 0.0
     cmd = [sys.executable, str(script_path)] + (args or [])
     log(f"-> {desc}")
     t0 = time.time()
@@ -62,18 +76,18 @@ def run(script_rel, desc, args=None, timeout=1800):
         elapsed = time.time() - t0
         if result.returncode == 0:
             log(f"{desc} ({elapsed:.0f}s)", "OK")
-            return True
+            return True, elapsed
         log(f"{desc}  exit {result.returncode}  ({elapsed:.0f}s)", "FAIL")
         if result.stderr:
             for line in result.stderr.strip().splitlines()[-5:]:
                 log(f"   {line}", "FAIL")
-        return False
+        return False, elapsed
     except subprocess.TimeoutExpired:
         log(f"{desc} timed out after {timeout}s", "FAIL")
-        return False
+        return False, float(timeout)
     except Exception as e:
         log(f"{desc} exception: {e}", "FAIL")
-        return False
+        return False, time.time() - t0
 
 
 def load_state():
@@ -99,7 +113,8 @@ def run_phase(name, script_rel, desc, state, args=None, timeout=1800):
     if name in state["completed"]:
         log(f"SKIP (already done today): {desc}", "WARN")
         return True
-    ok = run(script_rel, desc, args=args, timeout=timeout)
+    ok, elapsed = run(script_rel, desc, args=args, timeout=timeout)
+    log_runtime(name, ok, elapsed, timeout)
     if ok:
         state["completed"].append(name)
         if name in state["failed"]:
@@ -158,6 +173,8 @@ WEEKLY_PHASES = [
     ("max_pain",       "market/compute_max_pain.py",           "Index options max-pain (from fo_data)", None, 600),
     ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
     ("annual_fin",     "events/fetch_annual_financials.py",    "Annual financials (yfinance)",          None, 7200),
+    ("screener_fund",  "events/fetch_screener_fundamentals.py","Screener deep fundamentals (raw only; 6a)", None, 3600),
+    ("prereg",         "common/preregister_signals.py",        "Signal pre-registration governance",    None, 120),
     ("alphavantage",   "events/fetch_alphavantage.py",         "AlphaVantage US earnings/holdings/insider", None, 300),
     # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---
     ("isin",        "registry/build_isin_master.py",      "ISIN master + renames",                  None, 600),

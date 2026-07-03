@@ -239,6 +239,15 @@ def main():
             match = len(cur & snap) / len(snap)
             check(match >= 0.99, "P6 NIFTY 50 current membership matches snapshot",
                   f"match={match:.1%} n={len(snap)}")
+        # Bera/niftyindices fix must be UNDERNEATH the NIFTY 50 history (not the
+        # 58% turnover proxy): zero reconstructed rows allowed for NIFTY 50
+        n50_recon = q("SELECT COUNT(*) FROM index_membership WHERE index_name='NIFTY 50' "
+                      "AND method='reconstructed_turnover'")[0]
+        n50_official = q("SELECT COUNT(*) FROM index_membership WHERE index_name='NIFTY 50' "
+                         "AND method='niftyindices_official'")[0]
+        check(n50_recon == 0 and n50_official > 50,
+              "P6 NIFTY 50 history = niftyindices data, zero turnover-proxy rows",
+              f"official={n50_official} recon={n50_recon}")
         # sector coverage of the tradable universe: no NULL inside current top-500
         d_pu = q("SELECT MAX(rebal_date) FROM pit_universe")[0]
         sec_gap = q("SELECT COUNT(*) FROM pit_universe p LEFT JOIN dim_sector s "
@@ -424,6 +433,58 @@ def main():
             check(abs(ra[0] - expect) < 1e-6,
                   "P13 regime_align == validated 4-vote gate (re-derived)",
                   f"stored={ra[0]:.1f} expect={expect:.1f}")
+
+    # ============ PHASE 14: pre-registration governance (Part 2) ============
+    if "signal_preregistration" in tables:
+        print("Verifying Phase 14: pre-registration governance ...", flush=True)
+        nprereg = q("SELECT COUNT(*) FROM signal_preregistration")[0]
+        check(nprereg >= 10, "P14 registry populated", f"signals={nprereg}")
+        # every scored event type must be pre-registered as scored
+        for (et,) in conn.execute("SELECT DISTINCT event_type FROM event_signals "
+                                  "WHERE evidence_tier='scored'"):
+            st = q("SELECT status FROM signal_preregistration WHERE signal=?", (et,))
+            check(st is not None and st and st[0] == "scored",
+                  f"P14 scored '{et}' has a scored pre-registration",
+                  f"prereg={st[0] if st else 'MISSING'}")
+        # registered thresholds actually met by persisted validation results
+        if "event_validation" in tables:
+            v = q("SELECT mean_ar, t_stat, mean_ar_h2 FROM event_validation "
+                  "WHERE event_type='insider_cluster_buy' ORDER BY run_at DESC LIMIT 1")
+            st = q("SELECT status FROM signal_preregistration "
+                   "WHERE signal='insider_cluster_buy'")
+            if v and st and st[0] == "scored":
+                check(v[0] > 0 and v[1] >= 3.0 and v[2] > 0,
+                      "P14 insider prereg thresholds met by persisted results",
+                      f"mean={v[0]*100:.2f}% t={v[1]:.2f} h2={v[2]*100:.2f}%")
+        # killed signals must never hold weight or scored tier
+        for (sig,) in conn.execute("SELECT signal FROM signal_preregistration "
+                                   "WHERE status='killed'"):
+            w = q("SELECT COUNT(*) FROM score_weights WHERE pillar=? AND weight != 0", (sig,))[0]
+            t = q("SELECT COUNT(*) FROM event_signals WHERE event_type=? "
+                  "AND evidence_tier='scored'", (sig,))[0]
+            check(w == 0 and t == 0, f"P14 killed '{sig}' carries no weight/tier",
+                  f"weights={w} scored_events={t}")
+        # PIT: no same-day event may influence a card's score (strict '<' re-derivation)
+        cd14 = q("SELECT MAX(card_date) FROM score_audit")[0]
+        if cd14:
+            import sys as _s14
+            _s14.path.insert(0, str(Path(__file__).resolve().parents[1] / "ideas"))
+            import scoring as SC14
+            syms14 = [s for s, in conn.execute(
+                "SELECT h.symbol FROM thesis h WHERE h.narrative='live:momentum_bands' "
+                "AND h.created_at=?", (cd14,))]
+            if syms14:
+                ev14, _ = SC14.event_subscores(conn, cd14, syms14)
+                bad14 = 0
+                for sym, sub in conn.execute(
+                        "SELECT h.symbol, a.subscore FROM score_audit a JOIN thesis h "
+                        "ON a.thesis_id=h.thesis_id WHERE a.card_date=? "
+                        "AND a.pillar='event_score' AND h.created_at=?", (cd14, cd14)):
+                    if abs(ev14.get(sym, 50.0) - sub) > 1e-6:
+                        bad14 += 1
+                check(bad14 == 0,
+                      "P14 event_score re-derives with STRICT event_date < card_date",
+                      f"mismatches={bad14}/{len(syms14)}")
 
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
