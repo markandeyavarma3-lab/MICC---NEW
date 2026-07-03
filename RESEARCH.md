@@ -222,3 +222,24 @@ py -3.14 common\verify_phases.py                # 49-check audit
 
 **Deferred:** Part 2 (populate real sub-scores: macro spine, events, signal library),
 Part 3 (Friday learning loop updating `score_weights`, risk engine, ML/CPCV overlay).
+
+---
+
+## Part 2 — Signal & Engine Depth (complete, 2026-07)
+
+Discipline rule enforced throughout: **no scoring weight without a pre-registered
+walk-forward pass (t≥3)**. Four challengers tested, one survived. See `PART2.md`.
+
+| Challenger | Result | Verdict |
+|---|---|---|
+| Multi-axis regime spine | OOS 1.42 vs incumbent 1.53 | NO-SHIP → context |
+| Insider cluster buys | +2.97% 21d AR, t=3.67, H2 +5.67% | **SCORED** → event_score pillar |
+| Amihud illiquidity | IC −0.020 (wrong sign in top-500) | context |
+| RS vs sector | IC +0.013, t=1.4 | context |
+
+Delivered: `regime_daily` (6-axis spine, context), `event_signals` (14,897 events,
+5 evidence-graded builders incl. 9,314 pledge risk flags), `sector_regime_daily`
+(15-sector RRG, context), `macro_sensitivity` (monthly betas, display), scoring
+**v2.0** (event_score pillar; regime_align = validated 4-vote gate, fixing the
+breadth double-count; pledge → risk_penalty), idea-card context tags, weekly
+ship-gate revalidations in the pipeline. verify_phases: 54 → **72 checks**, green.

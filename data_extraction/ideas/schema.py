@@ -84,9 +84,11 @@ DDL = [
     )""",
 ]
 
-# The six scoring pillars, canonical order. risk_penalty is negative-weighted.
+# The scoring pillars, canonical order. risk_penalty is negative-weighted.
+# event_score added in v2.0 (Part 2 Module 7) after insider clusters passed their
+# pre-registered event study (t=3.67).
 PILLARS = ["signal_strength", "trend_align", "regime_align",
-           "liquidity_capacity", "confirmation", "risk_penalty"]
+           "liquidity_capacity", "confirmation", "event_score", "risk_penalty"]
 
 
 def connect():
@@ -100,7 +102,8 @@ def ensure_tables(conn):
         conn.execute(stmt)
     # additive migrations for tables that predate a column (SQLite ADD COLUMN is safe)
     have = {r[1] for r in conn.execute("PRAGMA table_info(idea_card)")}
-    for col, decl in (("notional", "REAL"), ("in_book", "INTEGER")):
+    for col, decl in (("notional", "REAL"), ("in_book", "INTEGER"),
+                      ("context_json", "TEXT")):
         if col not in have:
             conn.execute(f"ALTER TABLE idea_card ADD COLUMN {col} {decl}")
     conn.commit()

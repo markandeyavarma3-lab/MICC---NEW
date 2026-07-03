@@ -62,6 +62,7 @@ def main():
     if old:
         qm = ",".join("?" * len(old))
         cur.execute(f"DELETE FROM trade WHERE thesis_id IN ({qm})", old)
+        cur.execute(f"DELETE FROM score_audit WHERE thesis_id IN ({qm})", old)
         cur.execute(f"DELETE FROM thesis WHERE thesis_id IN ({qm})", old)
         conn.commit()
 

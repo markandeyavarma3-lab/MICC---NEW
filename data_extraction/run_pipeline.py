@@ -126,6 +126,9 @@ DAILY_PHASES = [
     ("mf_nav",      "funds/update_mf_nav.py",                  "MF NAVs",                               None, 600),
     ("announce",    "events/phase4_corporate_announcements.py","Corporate Announcements",               None, 180),
     ("insider",     "events/insider_trading_fetch.py",         "Insider Trading (SEBI)",                None, 180),
+    ("regime_spine","macro/build_regime_spine.py",             "Multi-axis regime spine (context)",     None, 300),
+    ("events_layer","events/build_event_signals.py",           "Event layer (insider clusters/pledge/PEAD)", None, 600),
+    ("sector_eng",  "common/build_sector_engine.py",           "Sector RRG + macro betas (context)",    None, 600),
     ("news",        "events/fetch_news.py",                    "Market news headlines (RSS)",           None, 120),
     ("ipo",         "events/fetch_ipo.py",                     "IPO GMP / subscription / listing",      None, 120),
     ("earnings",    "events/fetch_earnings_calendar.py",       "Board meetings + results calendar",     None, 120),
@@ -163,6 +166,10 @@ WEEKLY_PHASES = [
     ("features",    "common/build_feature_store.py",      "As-of feature store + IC report",        None, 900),
     ("backtest",    "common/backtest_momentum.py",        "Flagship backtest (bt_equity/metrics)",  None, 600),
     ("best_config", "common/backtest_best.py",            "Regime-validated best config (bt_best)", None, 600),
+    # --- Part 2 ship-gate revalidations (pre-registered rules; verdicts drive tiers) ---
+    ("spine_gate",  "common/backtest_regime_spine.py",    "Regime-spine vs 4-vote WF ship-gate",    None, 900),
+    ("insider_gate","common/backtest_insider.py",         "Insider cluster event-study ship-gate",  None, 600),
+    ("cand_gate",   "common/backtest_signal_candidates.py","Signal-candidate IC ship-gate",         None, 300),
     ("mf_score",    "funds/mf_scorecard.py",              "Equity MF risk-adjusted scorecard",      None, 900),
 ]
 

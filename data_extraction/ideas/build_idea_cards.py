@@ -52,13 +52,31 @@ def materialise(conn, card_date):
                    for p, s, w, c in cur.execute(
                        "SELECT pillar,subscore,weight,contribution FROM score_audit "
                        "WHERE thesis_id=? AND card_date=?", (tid, card_date))}
+        # context tags: zero scoring weight, display-only (Part 2 context tier)
+        ctx = {}
+        rg = cur.execute("SELECT regime_label,regime_score FROM regime_daily "
+                         "WHERE date<=? ORDER BY date DESC LIMIT 1", (card_date,)).fetchone()
+        if rg:
+            ctx["regime_spine"] = f"{rg[0]} ({rg[1]:.0f})"
+        if sector:
+            sq = cur.execute("SELECT rrg_quadrant,sector_breadth FROM sector_regime_daily "
+                             "WHERE sector=? AND date<=? ORDER BY date DESC LIMIT 1",
+                             (sector, card_date)).fetchone()
+            if sq and sq[0]:
+                ctx["sector_rrg"] = f"{sq[0]} (breadth {sq[1]:.0f}%)"
+        for et, ed in cur.execute(
+                "SELECT event_type,MAX(event_date) FROM event_signals WHERE symbol=? "
+                "AND event_date<=? AND evidence_tier='context' "
+                "AND julianday(?)-julianday(event_date)<=decay_horizon_days "
+                "GROUP BY event_type", (sym, card_date, card_date)):
+            ctx[et] = ed
         cur.execute(
             "INSERT INTO idea_card (card_date,thesis_id,symbol,company,sector,thesis_type,"
             "timeframe_class,entry,stop,target,rr_ratio,size_shares,confidence_score,"
-            "notional,in_book,pillar_json,status) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "notional,in_book,pillar_json,context_json,status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (card_date, tid, sym, company, sector, ttype, tf, entry, stop, target, rr,
-             size, conf, notional, in_book, json.dumps(pillars), status))
+             size, conf, notional, in_book, json.dumps(pillars), json.dumps(ctx), status))
         made += 1
     conn.commit()
     return made, cum_notional

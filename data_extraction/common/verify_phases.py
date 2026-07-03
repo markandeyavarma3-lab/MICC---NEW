@@ -374,6 +374,57 @@ def main():
                  "AND direction!='risk'")[0]
         check(badr == 0, "P11 risk-tier events carry direction=risk", f"bad={badr}")
 
+    # ============ PHASE 12: sector engine (Part 2 Module 5, context tier) ============
+    if "sector_regime_daily" in tables:
+        print("Verifying Phase 12: sector engine ...", flush=True)
+        n_sr = q("SELECT COUNT(*) FROM sector_regime_daily")[0]
+        check(n_sr > 50000, "P12 sector_regime_daily has full history", f"rows={n_sr:,}")
+        badq = q("SELECT COUNT(*) FROM sector_regime_daily WHERE rrg_quadrant IS NOT NULL "
+                 "AND rrg_quadrant NOT IN ('leading','improving','weakening','lagging')")[0]
+        check(badq == 0, "P12 RRG quadrants valid", f"bad={badq}")
+        badb = q("SELECT COUNT(*) FROM sector_regime_daily WHERE sector_breadth IS NOT NULL "
+                 "AND (sector_breadth < 0 OR sector_breadth > 100)")[0]
+        check(badb == 0, "P12 sector breadth bounded 0..100", f"bad={badb}")
+        nsec = q("SELECT COUNT(DISTINCT sector) FROM sector_regime_daily")[0]
+        check(nsec >= 10, "P12 >=10 sectors covered", f"sectors={nsec}")
+
+    # ============ PHASE 13: v2.0 scoring honesty (Part 2 Module 7) ============
+    if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights "
+                                       "WHERE version='v2.0'")[0] > 0:
+        print("Verifying Phase 13: v2.0 scoring honesty ...", flush=True)
+        # v1.0 history preserved (versioned, never overwritten)
+        v1 = q("SELECT COUNT(*) FROM score_weights WHERE version='v1.0'")[0]
+        check(v1 >= 6, "P13 v1.0 weight history preserved", f"rows={v1}")
+        # event_score may carry weight ONLY because the insider study passed
+        evw = q("SELECT weight FROM score_weights WHERE version='v2.0' "
+                "AND pillar='event_score'")
+        if evw and evw[0] > 0 and "event_validation" in tables:
+            v = q("SELECT verdict FROM event_validation "
+                  "WHERE event_type='insider_cluster_buy' ORDER BY run_at DESC LIMIT 1")
+            check(v and v[0] == "scored",
+                  "P13 event_score weight>0 backed by a passed event study",
+                  f"verdict={v[0] if v else None}")
+        # context-tier events must never appear in score_audit (zero weight enforced)
+        ctx_leak = q("SELECT COUNT(*) FROM score_audit WHERE pillar IN "
+                     "('pead_proxy','buyback_announce','index_inclusion','sector_align')")[0]
+        check(ctx_leak == 0, "P13 context tags carry zero scoring weight", f"leak={ctx_leak}")
+        # no orphaned audit rows (thesis rebuilds must cascade to score_audit)
+        orph_a = q("SELECT COUNT(*) FROM score_audit a LEFT JOIN thesis h "
+                   "ON a.thesis_id=h.thesis_id WHERE h.thesis_id IS NULL")[0]
+        check(orph_a == 0, "P13 no orphaned score_audit rows", f"orphans={orph_a}")
+        # regime_align subscore == validated 4-vote gate re-derivation (live theses only)
+        cd9 = q("SELECT MAX(card_date) FROM score_audit")[0]
+        ra = q("SELECT a.subscore FROM score_audit a JOIN thesis h ON a.thesis_id=h.thesis_id "
+               "WHERE a.card_date=? AND a.pillar='regime_align' LIMIT 1", (cd9,))
+        if ra is not None and ra:
+            import sys as _s9
+            _s9.path.insert(0, str(Path(__file__).resolve().parents[1] / "ideas"))
+            import scoring as SC13
+            expect = SC13.regime_votes(conn, cd9) / 4 * 100
+            check(abs(ra[0] - expect) < 1e-6,
+                  "P13 regime_align == validated 4-vote gate (re-derived)",
+                  f"stored={ra[0]:.1f} expect={expect:.1f}")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)

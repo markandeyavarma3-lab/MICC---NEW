@@ -17,24 +17,28 @@ Run:  py -3.14 ideas/scoring.py
 """
 from schema import connect, ensure_tables, PILLARS
 
-WEIGHT_VERSION = "v1.0"
+WEIGHT_VERSION = "v2.0"
 
 # risk_penalty MUST be <= 0; positive pillars MUST sum to 1.0 (asserted in seed).
-WEIGHTS_V1 = {
-    "signal_strength":    0.40,
-    "trend_align":        0.20,
+WEIGHTS = {
+    "signal_strength":    0.35,
+    "trend_align":        0.18,
     "regime_align":       0.15,
-    "confirmation":       0.15,
+    "confirmation":       0.12,
     "liquidity_capacity": 0.10,
+    "event_score":        0.10,
     "risk_penalty":      -0.10,
 }
 RATIONALE = {
     "signal_strength":    "primary momentum composite (generate_signals) — dominant driver",
     "trend_align":        "single-stock trend: ADX-14 + distance above 200DMA",
-    "regime_align":       "market breadth (% above 200DMA) as macro-regime proxy [Part2 refines]",
+    "regime_align":       "VALIDATED 4-vote macro gate (breadth/NIFTY/SPX/VIX), as-of; "
+                          "replaces raw breadth (double-count fix); spine NO-SHIP (1.42<1.53)",
     "confirmation":       "delivery% confirmation of the move",
     "liquidity_capacity": "median-turnover percentile within the book",
-    "risk_penalty":       "ATR-14 volatility drag (negative weight)",
+    "event_score":        "scored events only: insider cluster buys (event study t=3.67, "
+                          "+2.97% 21d AR); recency-decayed. PEAD/buyback/inclusion = context",
+    "risk_penalty":       "ATR-14 volatility drag + active promoter-pledge flag (negative weight)",
 }
 # A3 fundamentals cap: value/quality theses cannot exceed this confidence until the
 # symbol has >= FUND_MIN_YEARS of annual fundamentals. Data ceiling today is ~5yr.
@@ -49,7 +53,7 @@ def clamp(x, lo=0.0, hi=100.0):
 
 
 def seed_weights(conn, version=WEIGHT_VERSION, weights=None):
-    weights = weights or WEIGHTS_V1
+    weights = weights or WEIGHTS
     pos = sum(w for p, w in weights.items() if w > 0)
     assert abs(pos - 1.0) < 1e-9, f"positive weights must sum to 1.0, got {pos}"
     assert weights["risk_penalty"] <= 0, "risk_penalty weight must be <= 0"
@@ -83,11 +87,56 @@ def apply_fundamentals_cap(thesis_type, years, conf):
     return conf
 
 
+def regime_votes(conn, card_date):
+    """The VALIDATED 4-vote macro gate, as-of card_date (trailing only):
+    breadth>=50, NIFTY>200DMA, SPX>200DMA, IndiaVIX<1yr median. Returns 0..4."""
+    votes = 0
+    br = conn.execute("SELECT pct_above_200dma FROM market_breadth WHERE date<=? "
+                      "ORDER BY date DESC LIMIT 1", (card_date,)).fetchone()
+    votes += 1 if br and br[0] is not None and br[0] >= 50 else 0
+    for sym, kind in [("NIFTY50", "trend"), ("SPX", "trend"), ("IndiaVIX", "vix")]:
+        rows = conn.execute("SELECT close FROM global_indices_daily WHERE symbol=? "
+                            "AND date<=? ORDER BY date DESC LIMIT 252",
+                            (sym, card_date)).fetchall()
+        if len(rows) < 200:
+            continue
+        closes = [r[0] for r in rows]           # newest first
+        if kind == "trend":
+            votes += 1 if closes[0] > sum(closes[:200]) / 200 else 0
+        else:
+            med = sorted(closes)[len(closes) // 2]
+            votes += 1 if closes[0] < med else 0
+    return votes
+
+
+def event_subscores(conn, card_date, symbols):
+    """Per-symbol event pillar (0..100, 50 = neutral) from SCORED events only,
+    linearly recency-decayed over each event's decay horizon. Plus the active
+    promoter-pledge risk flag for the risk_penalty pillar."""
+    import datetime as _dt
+    d0 = _dt.date.fromisoformat(card_date)
+    ev, pledge = {}, set()
+    qmarks = ",".join("?" * len(symbols))
+    for sym, ed, etype, direction, horizon, tier in conn.execute(
+            f"SELECT symbol,event_date,event_type,direction,decay_horizon_days,evidence_tier "
+            f"FROM event_signals WHERE symbol IN ({qmarks}) AND event_date<=? "
+            f"AND evidence_tier IN ('scored','risk')", (*symbols, card_date)):
+        age = (d0 - _dt.date.fromisoformat(ed)).days
+        if age > (horizon or 63):
+            continue
+        if tier == "risk":
+            pledge.add(sym)
+            continue
+        fresh = 1 - age / (horizon or 63)       # 1 at event, 0 at horizon
+        boost = 50 * fresh * (1 if direction == "bullish" else -1)
+        ev[sym] = clamp(50 + max(ev.get(sym, 50) - 50, boost))  # strongest active event
+    return ev, pledge
+
+
 def compute_subscores(conn, card_date, symbols):
     """Return {symbol: {pillar: subscore}} for the given book on card_date."""
-    regime = conn.execute("SELECT pct_above_200dma FROM market_breadth "
-                          "WHERE date<=? ORDER BY date DESC LIMIT 1", (card_date,)).fetchone()
-    regime_align = clamp(regime[0]) if regime and regime[0] is not None else 50.0
+    regime_align = regime_votes(conn, card_date) / 4 * 100
+    ev, pledged = event_subscores(conn, card_date, symbols)
 
     sig = {r[0]: r for r in conn.execute(
         "SELECT symbol,score,deliv_1m,med_turnover FROM current_signals "
@@ -118,7 +167,8 @@ def compute_subscores(conn, card_date, symbols):
             "regime_align":       regime_align,
             "confirmation":       clamp(deliv),
             "liquidity_capacity": pct_rank(turn),
-            "risk_penalty":       clamp(atr * 10),
+            "event_score":        ev.get(s, 50.0),          # 50 = no active scored event
+            "risk_penalty":       clamp(atr * 10 + (25 if s in pledged else 0)),
         }
     return out
 
