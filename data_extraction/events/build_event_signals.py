@@ -65,7 +65,20 @@ def rebuild(conn, event_type, rows):
     print(f"  {event_type:20} {len(rows):>6,} events", flush=True)
 
 
+def insider_tier(conn):
+    """Tier comes from the persisted event-study verdict (backtest_insider), so a
+    daily rebuild can never silently demote a scored signal (or promote one)."""
+    try:
+        v = conn.execute("SELECT verdict FROM event_validation "
+                         "WHERE event_type='insider_cluster_buy' "
+                         "ORDER BY run_at DESC LIMIT 1").fetchone()
+        return v[0] if v else "context"
+    except Exception:
+        return "context"
+
+
 def insider_clusters(conn, now):
+    tier = insider_tier(conn)
     df = pd.read_sql(
         "SELECT symbol, filing_date, name, value FROM insider_trading "
         "WHERE transaction_type='Buy' AND value>=? AND filing_date>='2016-01-01' "
@@ -88,7 +101,7 @@ def insider_clusters(conn, now):
                 last_event = t0
                 val_cr = win["value"].sum() / 1e7
                 rows.append((sym, d, "insider_cluster_buy", "bullish", round(val_cr, 2),
-                             None, 63, "context", "insider_trading", now))
+                             None, 63, tier, "insider_trading", now))
     return rows
 
 

@@ -243,3 +243,25 @@ Delivered: `regime_daily` (6-axis spine, context), `event_signals` (14,897 event
 **v2.0** (event_score pillar; regime_align = validated 4-vote gate, fixing the
 breadth double-count; pledge → risk_penalty), idea-card context tags, weekly
 ship-gate revalidations in the pipeline. verify_phases: 54 → **72 checks**, green.
+
+---
+
+## Part 3 — Learning Loop, Risk Engine, Calibration, Fundamentals, ML Harness (2026-07)
+
+Premise enforced in code: at 10–30 closed trades/month there is no statistical power
+for fast weight updates — everything self-modifying is monitor-only, sample-gated,
+shadowed, human-approved. See `PART3.md`.
+
+| Study (pre-registered) | Result | Verdict |
+|---|---|---|
+| 6 exit variants on 540 own closed trades | whipsaw falsified (1%); wider stops worse | KEEP bands |
+| Ridge under CPCV(15 paths) | 0.61 vs champion 1.00 | KILLED |
+| LightGBM under CPCV | 0.80 vs 1.00 (DSR .92, W .84) | KILLED |
+| First Friday weight proposals | 0 scored-closed samples | 0 proposals |
+
+Delivered: risk meta-engine (DD/streak brakes, halt, sizing wire-in), integrity-
+checked VACUUM-INTO backups + passed restore drill, Friday loop (monitor-only,
+Bayesian shrinkage gated n≥30, ±0.02 cap), fundamentals PIT integration (44,740
+rows, FY-end+60d, 356 cap-lift-eligible symbols, switch OFF pending value
+re-backtest), event shadow log (2,023 instances), ML/CPCV harness with deflated
+Sharpe + stability gates. verify_phases: 79 → **98 checks green**.

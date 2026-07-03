@@ -144,6 +144,7 @@ DAILY_PHASES = [
     ("regime_spine","macro/build_regime_spine.py",             "Multi-axis regime spine (context)",     None, 300),
     ("events_layer","events/build_event_signals.py",           "Event layer (insider clusters/pledge/PEAD)", None, 600),
     ("sector_eng",  "common/build_sector_engine.py",           "Sector RRG + macro betas (context)",    None, 600),
+    ("event_shadow","ideas/event_shadow.py",                   "Event shadow log (fills fwd returns)",  None, 300),
     ("news",        "events/fetch_news.py",                    "Market news headlines (RSS)",           None, 120),
     ("ipo",         "events/fetch_ipo.py",                     "IPO GMP / subscription / listing",      None, 120),
     ("earnings",    "events/fetch_earnings_calendar.py",       "Board meetings + results calendar",     None, 120),
@@ -175,7 +176,10 @@ WEEKLY_PHASES = [
     ("mf_master",      "funds/fetch_mf_scheme_master.py",      "MF scheme master (AMC/category)",       None, 180),
     ("annual_fin",     "events/fetch_annual_financials.py",    "Annual financials (yfinance)",          None, 7200),
     ("screener_fund",  "events/fetch_screener_fundamentals.py","Screener deep fundamentals (raw only; 6a)", None, 3600),
+    ("screener_pit",   "events/integrate_screener_pit.py",     "Screener PIT-tag + depth (cap-lift OFF)", None, 600),
     ("prereg",         "common/preregister_signals.py",        "Signal pre-registration governance",    None, 120),
+    ("weekly_review",  "ideas/weekly_review.py",               "Friday learning loop (monitor-only)",   None, 600),
+    ("db_backup",      "../automation/backup_db.py",           "VACUUM INTO backup + integrity check",  None, 2700),
     ("alphavantage",   "events/fetch_alphavantage.py",         "AlphaVantage US earnings/holdings/insider", None, 300),
     # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---
     ("isin",        "registry/build_isin_master.py",      "ISIN master + renames",                  None, 600),

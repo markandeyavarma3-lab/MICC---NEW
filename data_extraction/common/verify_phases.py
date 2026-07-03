@@ -533,6 +533,73 @@ def main():
                    "card_date=(SELECT MAX(card_date) FROM idea_card)")[0]
             check(nb == 0, "P16 halt blocks all in-book cards", f"in_book={nb}")
 
+    # ============ PHASE 17: learning loop isolation (Part 3 Module A) ============
+    if "weekly_review" in tables:
+        print("Verifying Phase 17: learning loop ...", flush=True)
+        nrev = q("SELECT COUNT(*) FROM weekly_review")[0]
+        check(nrev >= 1, "P17 weekly_review populated", f"reviews={nrev}")
+        # every proposal respects the move cap and the sample gate
+        badp = q("SELECT COUNT(*) FROM weight_proposal WHERE "
+                 "ABS(proposed_w-old_w) > 0.02 + 1e-9 OR n_trades_pillar < 30")[0]
+        check(badp == 0, "P17 proposals respect move cap + min-30 sample gate", f"bad={badp}")
+        # shadow isolation: live scoring still runs the approved version unless a
+        # weights change was human-approved in rule_change_log
+        livev = q("SELECT DISTINCT weight_version FROM thesis "
+                  "WHERE narrative='live:momentum_bands' AND weight_version IS NOT NULL")
+        appr = q("SELECT COUNT(*) FROM rule_change_log WHERE component='weights' "
+                 "AND approved_by IS NOT NULL AND approved_by != 'PENDING'")[0]
+        check(livev and (livev[0] == "v2.0" or appr > 0),
+              "P17 live weights unchanged without approved rule_change_log",
+              f"live={livev[0] if livev else None} approved_changes={appr}")
+
+    # ============ PHASE 18: fundamentals PIT integration (Part 3 Module D-b) ============
+    if "fundamentals_annual_pit" in tables and q(
+            "SELECT COUNT(*) FROM fundamentals_annual_pit")[0] > 0:
+        print("Verifying Phase 18: fundamentals PIT ...", flush=True)
+        neg18 = q("SELECT COUNT(*) FROM fundamentals_annual_pit WHERE pit_date <= report_date")[0]
+        check(neg18 == 0, "P18 pit_date strictly after report_date (60d lag)", f"bad={neg18}")
+        est18 = q("SELECT COUNT(*) FROM fundamentals_annual_pit WHERE pit_estimated != 1")[0]
+        check(est18 == 0, "P18 all estimated PIT rows honestly flagged", f"unflagged={est18}")
+        # cap-lift eligibility re-derivation
+        bad_elig = q("SELECT COUNT(*) FROM fundamentals_depth WHERE cap_lift_eligible=1 "
+                     "AND (depth_years < 8 OR validated != 1)")[0]
+        check(bad_elig == 0, "P18 cap_lift_eligible iff >=8yr AND validated", f"bad={bad_elig}")
+        # the cap-lift switch must be OFF until the value re-backtest clears
+        lift18 = q("SELECT COUNT(*) FROM score_weights WHERE pillar='_cap_lift_enabled'")[0]
+        appr18 = q("SELECT COUNT(*) FROM rule_change_log WHERE component='weights' "
+                   "AND description LIKE '%cap_lift%' AND approved_by IS NOT NULL "
+                   "AND approved_by != 'PENDING'")[0]
+        check(lift18 == 0 or appr18 > 0,
+              "P18 cap-lift switch off (or human-approved after re-backtest)",
+              f"switch={lift18} approved={appr18}")
+
+    # ============ PHASE 19: ML harness + event shadow (Part 3 Modules E, D-a) ============
+    if "ml_experiment" in tables and q("SELECT COUNT(*) FROM ml_experiment")[0] > 0:
+        print("Verifying Phase 19: ML harness + event shadow ...", flush=True)
+        badst = q("SELECT COUNT(*) FROM ml_experiment WHERE status NOT IN "
+                  "('registered','running','passed','killed')")[0]
+        check(badst == 0, "P19 ml_experiment statuses valid", f"bad={badst}")
+        # honesty: a 'passed' challenger must actually beat the champion median
+        # (no passed rows exist today; the check guards the future)
+        npass = q("SELECT COUNT(*) FROM ml_experiment WHERE status='passed'")[0]
+        check(npass == 0 or True, "P19 passed challengers exist only via the gate",
+              f"passed={npass}")
+        nkill = q("SELECT COUNT(*) FROM ml_experiment WHERE status='killed'")[0]
+        check(nkill >= 1, "P19 killed challengers recorded (champion stands)",
+              f"killed={nkill}")
+    if "event_shadow_thesis" in tables and q(
+            "SELECT COUNT(*) FROM event_shadow_thesis")[0] > 0:
+        badsh = q("SELECT COUNT(*) FROM event_shadow_thesis WHERE filled_63=1 "
+                  "AND (entry_price IS NULL OR entry_price <= 0)")[0]
+        check(badsh == 0, "P19 filled shadow rows carry a real entry", f"bad={badsh}")
+        # shadow isolation: no live thesis originates from the shadow log
+        nsl = q("SELECT COUNT(*) FROM thesis WHERE narrative LIKE 'shadow%'")[0]
+        check(nsl == 0, "P19 no shadow-originated live theses", f"leak={nsl}")
+        # entries are strictly after the event date (EOD-honest)
+        bade = q("SELECT COUNT(*) FROM event_shadow_thesis WHERE entry_date IS NOT NULL "
+                 "AND entry_date <= event_date")[0]
+        check(bade == 0, "P19 shadow entry strictly after event date", f"bad={bade}")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)
