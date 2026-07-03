@@ -127,18 +127,18 @@ def run_phase(name, script_rel, desc, state, args=None, timeout=1800):
 
 # (phase_key, script_relative_path, description, args, timeout)
 DAILY_PHASES = [
-    ("core",        "market/daily_update.py",                  "Core: Stocks + Indices + F&O + Global", None, 1200),
-    ("parquet",     "common/export_parquet.py",                "Export stock_data -> per-symbol parquet", None, 1800),
+    ("core",        "market/daily_update.py",                  "Core: Stocks + Indices + F&O + Global", None, 1800),
+    ("parquet",     "common/export_parquet.py",                "Export stock_data -> per-symbol parquet", None, 3600),
     ("delivery",    "market/update_delivery.py",               "Delivery % (nselib)",                   None, 300),
     ("fii_dii",     "market/fetch_nse_data.py",                "FII/DII activity (direct NSE API)",     ["--fii"], 300),
     ("global_idx",  "market/phase9a_fetch_global_indices.py",  "Global indices (yfinance)",             None, 600),
     ("deals",       "market/fetch_deals.py",                   "Bulk/Block/Short deals (snapshot)",     None, 180),
     ("fo_ban",      "market/fetch_fo_ban.py",                  "F&O ban list",                          None, 120),
-    ("us_macro",    "macro/update_macro_us.py",                "US Macro (FRED)",                       ["--daily"], 600),
-    ("india_macro", "macro/update_macro_india_fred.py",        "FRED India Macro",                      ["--daily"], 300),
+    ("us_macro",    "macro/update_macro_us.py",                "US Macro (FRED)",                       ["--daily"], 1200),
+    ("india_macro", "macro/update_macro_india_fred.py",        "FRED India Macro",                      ["--daily"], 900),
     ("world_bank",  "macro/update_world_bank_india.py",        "World Bank India Macro",                None, 180),
     ("phase1",      "macro/fetch_phase1_data.py",              "RBI + G-Sec",                           ["--rbi", "--gsec"], 300),
-    ("mf_nav",      "funds/update_mf_nav.py",                  "MF NAVs",                               None, 600),
+    ("mf_nav",      "funds/update_mf_nav.py",                  "MF NAVs",                               None, 900),
     ("announce",    "events/phase4_corporate_announcements.py","Corporate Announcements",               None, 180),
     ("insider",     "events/insider_trading_fetch.py",         "Insider Trading (SEBI)",                None, 180),
     ("regime_spine","macro/build_regime_spine.py",             "Multi-axis regime spine (context)",     None, 300),
@@ -149,7 +149,7 @@ DAILY_PHASES = [
     ("ipo",         "events/fetch_ipo.py",                     "IPO GMP / subscription / listing",      None, 120),
     ("earnings",    "events/fetch_earnings_calendar.py",       "Board meetings + results calendar",     None, 120),
     ("greeks",      "market/phase2_greeks_calculator.py",      "Greeks + GEX (incremental)",            ["--daily"], 600),
-    ("trends",      "trends/fetch_trends.py",                  "Google Trends",                         ["--quiet"], 300),
+    ("trends",      "trends/fetch_trends.py",                  "Google Trends",                         ["--quiet"], 600),
     # --- analytics products (refresh the dashboard from the research layer) ---
     ("signals",     "common/generate_signals.py",              "Live top-decile book + 4-vote regime",  None, 300),
     ("recos",       "common/recommendations.py",               "Stock recos (entry/target/stop) + score", None, 600),
