@@ -84,11 +84,16 @@ version) · P18 PIT lag/flags, cap-lift eligibility re-derivation, switch-off ·
 P19 ML statuses, killed-challenger record, shadow entry/PIT and isolation.
 
 ## 5. Remaining Part 3 items (honest list)
-- **Value/quality re-backtest** on the extended PIT history → only path to flipping
-  `_cap_lift_enabled` (per-symbol cap lift). Biggest single remaining job.
-- **Quarterly cadences** to schedule when due: exit re-calibration, ML harness re-run.
+- ~~Value/quality re-backtest~~ **DONE 2026-07-03: FAIL.** 131 months (2015→2026):
+  value_ep IC +0.005 (t=0.48), quality_margin −0.003, quality_growth +0.001 — zero
+  predictive power even with the survivor tailwind. **Cap stays, now evidence-backed.**
+  Re-runs weekly (`value_gate`) as PIT depth grows; `--approve-cap-lift` exists but
+  requires a scored verdict it does not have.
+- ~~Quarterly cadences~~ **DONE**: `exit_recal` + `ml_gate` weekly phases with --auto
+  80-day self-gates.
 - **Event promotion** decision point arrives ~mid-2027 (12 months of shadow).
-- **Delivery polish** (F-b): notifications (Telegram/ntfy), dashboard risk/review panels.
+- ~~Delivery polish~~ **DONE**: ntfy failure alerts (topic in `MICC_NTFY_TOPIC`),
+  dashboard risk-state/weekly-review/context/weight-evolution panels.
 - **Live capital**: gated on 12–18 months of paper Idea-Engine track record with
   hit-rate ≥49%, positive MinTRL-informed Sharpe, DD within −30%. Kite order APIs are
   free (data ₹500/mo); static-IP requirement applies from 2026-04-01. **Not now.**

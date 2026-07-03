@@ -75,9 +75,25 @@ def load_weights(conn, version=WEIGHT_VERSION):
 
 
 def annual_years(conn, symbol):
+    """Fundamentals depth for the A3 cap. Base = yfinance annual_income years.
+    The deeper screener history (fundamentals_depth) counts ONLY if the
+    '_cap_lift_enabled' switch was human-approved after a value re-backtest pass
+    — which it was NOT (2026-07 re-backtest FAILED: value/quality ICs ~0 even
+    with survivor tailwind), so this stays on the conservative base."""
     r = conn.execute("SELECT COUNT(DISTINCT substr(report_date,1,4)) FROM annual_income "
                      "WHERE symbol=?", (symbol,)).fetchone()
-    return r[0] if r else 0
+    base = r[0] if r else 0
+    try:
+        lift = conn.execute("SELECT COUNT(*) FROM score_weights "
+                            "WHERE pillar='_cap_lift_enabled'").fetchone()[0]
+        if lift:
+            d = conn.execute("SELECT depth_years FROM fundamentals_depth "
+                             "WHERE symbol=? AND validated=1", (symbol,)).fetchone()
+            if d:
+                return max(base, d[0])
+    except Exception:
+        pass
+    return base
 
 
 def apply_fundamentals_cap(thesis_type, years, conf):

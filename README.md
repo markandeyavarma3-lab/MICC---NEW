@@ -22,6 +22,24 @@
 
 ## Progress log
 
+### 2026-07-03 · 21:15 IST — Value re-backtest DONE (FAIL, cap stays) — Parts 1–3 fully closed
+
+The last big open item is answered. **Value/quality re-backtest on the extended PIT
+history (131 months, 2015→2026): FAIL** — `value_ep` IC +0.005 (t=0.48),
+`quality_margin` −0.003 (t=−0.26), `quality_growth` +0.001 (t=0.12) — essentially zero
+cross-sectional predictive power **even with the survivorship tailwind** of a
+current-survivor universe (~40% historical coverage). Pre-registered verdict:
+**the ≤70 confidence cap stays**, now backed by evidence rather than just prudence.
+Cap-lift plumbing exists (`--approve-cap-lift`) but has nothing to approve.
+
+Also built: **announcement taxonomy tagger** (16,963 announcements → 13 deterministic
+classes, 26% residual for a future LLM layer) — the last optional Part 3 module.
+Both wired into the pipeline (daily `ann_tags`, weekly `value_gate` re-run as depth grows).
+
+**Everything remaining is now time-gated, not build-gated:** 10-green-runs streak (0/10,
+first full scheduled run tonight), event-thesis promotion (~mid-2027), true PEAD (~2028),
+weight proposals (needs ≥30 closed scored trades/pillar), live capital (12–18mo paper).
+
 ### 2026-07-03 · 19:30 IST — Parts 1–3 built; hardening sweep done; 98/98 verified
 
 **Where the system stands right now**
