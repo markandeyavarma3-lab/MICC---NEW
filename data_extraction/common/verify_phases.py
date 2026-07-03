@@ -319,6 +319,32 @@ def main():
                      (_bb.MAX_POSITION_PCT * _bb.CAPITAL + 1,))[0]
             check(over == 0, "P8 portfolio: no position exceeds concentration cap", f"over={over}")
 
+    # ============ PHASE 10: regime spine (Part 2 Module 1) ============
+    if "regime_daily" in tables:
+        print("Verifying Phase 10: regime spine ...", flush=True)
+        n_rd = q("SELECT COUNT(*) FROM regime_daily")[0]
+        check(n_rd > 4000, "P10 regime_daily has full history", f"days={n_rd:,}")
+        badscore = q("SELECT COUNT(*) FROM regime_daily WHERE regime_score IS NULL "
+                     "OR regime_score < 0 OR regime_score > 100")[0]
+        check(badscore == 0, "P10 regime_score bounded 0..100, no NULLs", f"bad={badscore}")
+        # known-episode re-derivation: GFC + COVID must be risk_off
+        gfc = q("SELECT regime_score FROM regime_daily WHERE date LIKE '2008-11-2%' "
+                "ORDER BY date LIMIT 1")
+        cov = q("SELECT regime_score FROM regime_daily WHERE date LIKE '2020-03-2%' "
+                "ORDER BY date LIMIT 1")
+        check(gfc and gfc[0] < 40 and cov and cov[0] < 40,
+              "P10 GFC + COVID classified risk_off",
+              f"gfc={gfc[0] if gfc else None} covid={cov[0] if cov else None}")
+        # ship-gate honesty: if the spine did not beat the incumbent, it must be
+        # recorded shipped=0 (scoring falls back to the validated 4-vote gate)
+        if "spine_validation" in tables:
+            sv = q("SELECT shipped, sharpe_incumbent, sharpe_spine FROM spine_validation "
+                   "WHERE book='IV' ORDER BY run_at DESC LIMIT 1")
+            if sv:
+                consistent = (sv[0] == 1) == (sv[2] > sv[1])
+                check(consistent, "P10 spine ship verdict consistent with OOS Sharpe",
+                      f"shipped={sv[0]} inc={sv[1]:.2f} spine={sv[2]:.2f}")
+
     # ============ PHASE 9: scoring framework (Part 1 Stage 4) ============
     if "score_weights" in tables and q("SELECT COUNT(*) FROM score_weights")[0] > 0:
         print("Verifying Phase 9: scoring framework ...", flush=True)
