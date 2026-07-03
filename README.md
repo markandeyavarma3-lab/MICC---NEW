@@ -22,6 +22,22 @@
 
 ## Progress log
 
+### 2026-07-03 · 23:00 IST — New React frontend (glassy dark, 6 pages) replaces the single-page HTML
+
+Rebuilt the UI as a proper app: **Vite + React + Tailwind SPA** (`web_ui/`) served by the
+same authenticated Python server at `http://localhost:8765` (login `admin`/`micc`).
+- **Sidebar, 6 pages**: Overview (regime+risk hero, animated equity curve) · Idea Cards
+  (glass cards, confidence rings, **click → thesis drill-down** with pillar-contribution
+  chart, price-band visual, context tags) · Risk (brake ladder, sector concentration) ·
+  Research & Verdicts (the full ledger, IC gates, CPCV results, exit calibration, Friday
+  review, weight versions) · Funds · Events & Smart Money (shadow scoreboard, taxonomy).
+- **Design**: emerald+cyan glass on deep navy; chart palette validated for CVD/contrast
+  (dataviz six-checks). Framer-motion page transitions, count-ups, animated nav.
+- Old dashboard preserved at `/legacy`. All data comes live from `/api/*`
+  (7 new endpoints: best/risk/review/verdicts/events/health/sectors).
+- **Run it**: `py -3.14 data_extraction\web\serve_dashboard.py` → open `localhost:8765`.
+  Rebuild UI after changes: `cd web_ui && npm run build` (Node 24 installed).
+
 ### 2026-07-03 · 21:15 IST — Value re-backtest DONE (FAIL, cap stays) — Parts 1–3 fully closed
 
 The last big open item is answered. **Value/quality re-backtest on the extended PIT

@@ -23,6 +23,10 @@ import api  # noqa: E402  (web/api.py — JSON REST endpoints)
 
 ROOT = Path(__file__).resolve().parents[1]          # data_extraction/
 DASH = Path(r"D:\MICC\MICC_dashboard.html")
+SPA = Path(r"D:\MICC\web_ui\dist")                   # React app (npm run build); / serves this
+MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript",
+        ".css": "text/css", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+        ".png": "image/png", ".woff2": "font/woff2", ".map": "application/json"}
 USER = os.getenv("MICC_USER", "admin")
 PASS = os.getenv("MICC_PASS", "micc")
 PORT = int(os.getenv("MICC_PORT", "8765"))
@@ -79,6 +83,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/refresh"):
             self._refresh()
             self.send_response(303); self.send_header("Location", "/"); self.end_headers(); return
+        if self.path.startswith("/legacy"):
+            if not DASH.exists():
+                self._refresh()
+            data = DASH.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        # ---- React SPA (web_ui/dist); falls back to the legacy HTML if not built ----
+        if SPA.exists():
+            rel = self.path.split("?")[0].lstrip("/") or "index.html"
+            f = (SPA / rel).resolve()
+            if not str(f).startswith(str(SPA)) or not f.is_file():
+                f = SPA / "index.html"                 # SPA fallback (hash router)
+            data = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", MIME.get(f.suffix, "application/octet-stream"))
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if not DASH.exists():
             self._refresh()
         data = DASH.read_bytes()

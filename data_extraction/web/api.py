@@ -83,13 +83,89 @@ def handle(path):
 
         if path == "/api/ideas":
             cd = c.execute("SELECT MAX(card_date) FROM idea_card").fetchone()[0]
-            cards = _rows(c, "SELECT symbol,company,sector,thesis_type,timeframe_class,"
-                             "entry,stop,target,rr_ratio,size_shares,confidence_score,pillar_json "
+            cards = _rows(c, "SELECT thesis_id,symbol,company,sector,thesis_type,timeframe_class,"
+                             "entry,stop,target,rr_ratio,size_shares,confidence_score,"
+                             "notional,in_book,pillar_json,context_json "
                              "FROM idea_card WHERE card_date=? ORDER BY confidence_score DESC", (cd,))
             import json as _json
             for row in cards:
                 row["pillars"] = _json.loads(row.pop("pillar_json") or "{}")
+                row["context"] = _json.loads(row.pop("context_json") or "{}")
             return 200, {"card_date": cd, "n": len(cards), "cards": cards}
+
+        if path == "/api/best":
+            eq = _rows(c, "SELECT date, ret, equity FROM bt_best ORDER BY date")
+            peak = 0.0
+            for r in eq:
+                peak = max(peak, r["equity"])
+                r["drawdown"] = round(r["equity"] / peak - 1, 4) if peak else 0
+            return 200, {"n": len(eq), "series": eq}
+
+        if path == "/api/risk":
+            hist = _rows(c, "SELECT * FROM risk_state_daily ORDER BY as_of_date DESC LIMIT 90")
+            return 200, {"current": hist[0] if hist else None, "history": hist}
+
+        if path == "/api/review":
+            rev = _rows(c, "SELECT * FROM weekly_review ORDER BY review_id DESC LIMIT 1")
+            props = _rows(c, "SELECT * FROM weight_proposal ORDER BY proposal_id DESC LIMIT 20")
+            wts = _rows(c, "SELECT version, pillar, weight, rationale FROM score_weights "
+                           "WHERE pillar NOT LIKE '\\_%' ESCAPE '\\' ORDER BY version, pillar")
+            return 200, {"latest": rev[0] if rev else None, "proposals": props, "weights": wts}
+
+        if path == "/api/verdicts":
+            prereg = _rows(c, "SELECT * FROM signal_preregistration ORDER BY signal")
+            cand = _rows(c, "SELECT * FROM signal_candidate_validation ORDER BY candidate")
+            ev = _rows(c, "SELECT * FROM event_validation")
+            spine = _rows(c, "SELECT * FROM spine_validation")
+            ml = _rows(c, "SELECT exp_id, created_at, model_family, status, "
+                          "pre_registered_criteria_json FROM ml_experiment")
+            mlr = _rows(c, "SELECT exp_id, model, sharpe, deflated_sharpe, kendall_w "
+                           "FROM ml_result ORDER BY exp_id, path_id")
+            exitc = _rows(c, "SELECT * FROM exit_calibration ORDER BY variant")
+            return 200, {"preregistration": prereg, "candidates": cand, "events": ev,
+                         "spine": spine, "ml_experiments": ml, "ml_paths": mlr,
+                         "exit_calibration": exitc}
+
+        if path == "/api/events":
+            recent = _rows(c, "SELECT symbol, event_date, event_type, direction, magnitude, "
+                              "evidence_tier FROM event_signals "
+                              "ORDER BY event_date DESC LIMIT 60")
+            shadow = _rows(c, "SELECT event_type, COUNT(*) n, SUM(filled_63) filled63, "
+                              "AVG(CASE WHEN filled_63=1 AND fwd_63>0 THEN 1.0 "
+                              "WHEN filled_63=1 THEN 0 END) hit63, "
+                              "AVG(CASE WHEN filled_63=1 THEN fwd_63 END) avg63 "
+                              "FROM event_shadow_thesis GROUP BY event_type")
+            tags = _rows(c, "SELECT tag, COUNT(*) n FROM announcement_tags "
+                            "GROUP BY tag ORDER BY n DESC")
+            return 200, {"recent": recent, "shadow": shadow, "tags": tags}
+
+        if path == "/api/health":
+            hb = _rows(c, "SELECT ts, check_name, status, detail FROM monitoring_log "
+                          "WHERE check_name LIKE 'heartbeat:%' ORDER BY ts DESC LIMIT 12")
+            streak = 0
+            for r in hb:
+                if r["status"] == "OK":
+                    streak += 1
+                else:
+                    break
+            fresh = {}
+            for tbl, col in [("stock_data", "date"), ("current_signals", "rebal_date"),
+                             ("idea_card", "card_date"), ("regime_daily", "date")]:
+                try:
+                    fresh[tbl] = c.execute(f"SELECT MAX({col}) FROM {tbl}").fetchone()[0]
+                except Exception:
+                    fresh[tbl] = None
+            bak = _rows(c, "SELECT ts, detail FROM monitoring_log "
+                           "WHERE check_name='backup:weekly' ORDER BY ts DESC LIMIT 1")
+            return 200, {"heartbeats": hb, "streak": streak, "target": 10,
+                         "freshness": fresh, "last_backup": bak[0] if bak else None}
+
+        if path == "/api/sectors":
+            return 200, _rows(c, "SELECT sector, rs_vs_nifty, rs_mom, rrg_quadrant, "
+                                 "sector_breadth, sector_score, n_members "
+                                 "FROM sector_regime_daily WHERE date="
+                                 "(SELECT MAX(date) FROM sector_regime_daily) "
+                                 "ORDER BY rs_vs_nifty DESC")
 
         m = re.match(r"/api/thesis/(\d+)$", path)
         if m:
