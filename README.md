@@ -4,19 +4,138 @@
 > strategy and a live dashboard — survivorship-free, corporate-action-adjusted, point-in-time.
 
 **Highlights**
-- 🗄️ **130.4M-row** warehouse (57 tables, 16.6 GB): 21 yrs equity OHLCV + delivery, 69M-row F&O,
-  37M-row MF NAV, macro, deals, events — survivorship-free from 2005.
-- 🧱 **Clean research layer**: corp-action-adjusted prices (cliff-guarded), point-in-time
-  equity-only universe, ISIN rename tracking, as-of feature store — **29/29 pin-to-pin verified**.
+- 🗄️ **130M+ row** warehouse (100+ tables, 19 GB): 21 yrs equity OHLCV + delivery, 69M-row F&O,
+  37M-row MF NAV, macro, deals, events, insider filings — survivorship-free from 2005.
 - 🧪 **Validated strategy**: momentum + delivery + low-vol composite, inverse-vol weighted, macro
   **regime-gated** → **out-of-sample Sharpe 1.53** (Calmar 1.26, MaxDD −19%, net of costs, 2009→2026).
-- 🔬 **Honest negatives documented**: ML ranker loses to the linear model; F&O/sector-neutral add
-  no edge; vol-target doesn't stack on the gate. (Research-first, not hype.)
-- 📈 **Products**: live signal generator, equity-fund scorecard (847 funds), self-contained dashboard.
+- 🃏 **Live idea desk**: ₹1cr paper book, ATR-banded idea cards (stop ≤10%), 7-pillar auditable
+  confidence, portfolio caps, drawdown/streak risk brakes — every number reproducible from audit tables.
+- ⚖️ **Verdict-driven research**: every signal pre-registered (t≥3 walk-forward gate). **10 studies
+  run, 1 survivor** (insider cluster buys). Regime spine, ML (CPCV), value/quality, amihud — all
+  honestly killed with receipts.
+- 🤖 **Self-governing**: scheduled daily/weekly pipeline, integrity-checked backups + restore drill,
+  ntfy failure alerts, monitor-only learning loop, quarterly auto re-validations — **98/98 pin-to-pin verified**.
+- 🖥️ **React frontend**: glassy dark 6-page SPA at `localhost:8765` (thesis drill-downs, verdict
+  ledger, risk panels) on a live JSON API.
 
 **Key docs:** [📄 Research paper](RESEARCH.md) · [🧭 Analysis blueprint](MICC_BLUEPRINT.md) ·
 [🏗️ Part 1](PART1.md) · [📡 Part 2](PART2.md) · [🔁 Part 3](PART3.md) · [🛟 DR runbook](docs/DR_RUNBOOK.md) ·
 [📊 Dashboard](MICC_dashboard.html) (open in a browser) · run `py -3.14 common/verify_phases.py` to audit.
+
+---
+
+## 🧭 The system today — complete state (as of 2026-07-03)
+
+> The deep record of what was built across Parts 1–3 + the frontend, how it fits together,
+> how to run it, and what honestly remains. Per-part detail: [PART1.md](PART1.md) ·
+> [PART2.md](PART2.md) · [PART3.md](PART3.md). Dated entries: [Progress log](#progress-log) below.
+
+### Architecture at a glance
+
+```
+  NSE/BSE/FRED/yfinance/screener  ──►  market.db (19GB, 100+ tables, system-of-record)
+                                          │
+        DAILY PIPELINE (Task Scheduler 18:30, ~30 phases)
+        fetchers → adjusted prices → regime spine → event layer → sector engine
+        → signals → recos → rec_sync → RISK STATE → IDEA CARDS → dashboard → monitor
+                                          │
+        WEEKLY (Fri 19:00): fundamentals, registries, PIT membership, backtests,
+        screener PIT + VALUE GATE, Friday review, quarterly auto-gates, BACKUP
+                                          │
+  verify_phases.py (98 checks) ── ntfy alerts ── status.py ── React UI @ :8765
+```
+
+### Part 1 — the Idea Engine (built, verified)
+- **Data model**: `thesis` (one row per conviction) → `trade` (entries/exits, `atr_k`
+  persisted) → `idea_card` (materialised view with per-pillar JSON). 555 legacy
+  recommendations backfilled with **exact return parity (0.0 diff)**; daily `rec_sync`
+  keeps the mirror in lockstep.
+- **Bands & sizing (owner spec)**: ATR-14 stops **capped at ≤10% below entry**, 2:1 reward:risk,
+  equal rupee-risk ₹10k/idea, single position ≤10% of the **₹1cr capital**, book filled by
+  confidence until the capital cap; `in_book` vs waitlist on every card.
+- **Scoring**: versioned linear composite (`score_weights` v1.0→v2.0) with per-pillar
+  `score_audit` — every confidence number recomputable exactly. A3 cap: value/quality ≤70.
+- **Named index membership**: real niftyindices NIFTY 50 history 2008→2025 (conf 1.0),
+  Wikipedia-bridged Sep-2025 reshuffle to present (conf 0.95, 96% validated); weak turnover
+  proxies quarantined behind `index_membership_consumable` (conf ≥0.75 only).
+- **Automation**: `MICC-Daily` (18:30) + `MICC-Weekly` (Fri 19:00) scheduled tasks,
+  heartbeats to `monitoring_log`, **ntfy push alerts on failure**, per-phase runtime
+  logging with timeout-headroom warnings in `automation/status.py`.
+
+### Part 2 — signal depth under a discipline rule (built, verified)
+> *Pre-registration governance: nothing scores without a registered test window, pass
+> threshold and kill criteria (`signal_preregistration`, 13 signals). t ≥ 3.0 or context.*
+
+| Challenger | Test | Result | Verdict |
+|---|---|---|---|
+| Multi-axis regime spine (6 axes) | WF OOS Sharpe vs 4-vote gate, same months | 1.42 vs **1.53** | ❌ NO-SHIP → context |
+| **Insider cluster buys** | 21d abnormal-return event study | **+2.97%, t=3.67**, H2 +5.67% | ✅ **SCORED** |
+| Amihud illiquidity | monthly rank-IC | IC **−0.020** (wrong sign in top-500) | ❌ context |
+| RS vs sector | monthly rank-IC | +0.013, t=1.4 | ❌ context |
+
+- **Event layer**: 14,897 evidence-tiered events (insider clusters, 9,314 pledge risk flags,
+  PEAD proxy pending depth, buybacks, index inclusions). Strict PIT: `event_date < card_date`.
+- **Scoring v2.0**: new `event_score` pillar (0.10, insider only, recency-decayed);
+  `regime_align` = the **validated 4-vote gate** (fixes breadth double-count);
+  pledge flags feed `risk_penalty`. Positive weights sum to 1.00; v1.0 preserved.
+- **Context tier** (display, zero weight, verify-enforced): regime spine label/axes,
+  15-sector RRG rotation engine, macro sensitivity betas, context event tags on cards.
+
+### Part 3 — self-governance & the honest negatives (built, verified)
+- **Exit calibration** on our own 540 closed trades: *whipsaw hypothesis falsified* — only
+  **1%** of stopped trades later hit target; wider stops monotonically worse → **KEEP bands**.
+  `trail_atr3` near-miss re-tested quarterly (auto-gated).
+- **Risk meta-engine** (`risk_state_daily`, wired into sizing + card selection):
+  DD brakes ×1.0/0.75/0.5/0.25 at 10/15/22% + **halt >22%**, 3-loss streak brake,
+  concentration + correlation throttles. Current: +₹4.7L cum R-PnL, DD 3.9%, mult ×1.0.
+- **Friday learning loop** (monitor-only *by design* — 10–30 trades/mo cannot support fast
+  weight updates): weekly attribution + narrative; Bayesian shrinkage proposals hard-gated
+  (κ=100, move cap ±0.02, **min 30 closed scored trades/pillar**, shadow + human approval).
+  First review: 0 proposals — correct.
+- **Fundamentals depth**: screener.in scrape (494 symbols × 12 FYs) → 44,740 PIT-tagged rows
+  (FY-end+60d, all flagged estimated) → 397/411 validated vs yfinance → 356 cap-lift-eligible.
+- **Value/quality re-backtest → FAIL**: 131 months, ICs ≈ 0 (t = 0.48 / −0.26 / 0.12) *even
+  with the survivor tailwind* → **the ≤70 cap stays, evidence-backed**. Re-runs weekly.
+- **ML/CPCV harness**: 15 purged paths — ridge 0.61 and LightGBM 0.80 median path Sharpe
+  vs champion **1.00** → both **KILLED** (LGBM had DSR 0.92, Kendall-W 0.84 — still must beat
+  the champion). Re-runs quarterly. Champion = the frozen linear composite, again.
+- **Event shadow log**: 2,023 would-be event ideas accruing 21/63/126td outcomes;
+  promotion gate: ≥12 months + ≥30 filled + beats 49% baseline (~mid-2027).
+- **Ops**: weekly `VACUUM INTO` backups (18.7GB, integrity-checked) + **secondary copy on C:**,
+  restore drill **PASS**, DR runbook (`docs/DR_RUNBOOK.md`), 60-day log rotation,
+  `requirements-lock.txt` (186 pins), announcement taxonomy tagger (16,963 classified).
+
+### Verification — 29 → 98 pin-to-pin checks
+The suite (`common/verify_phases.py`) re-derives every claim from raw tables nightly:
+adjusted prices, PIT universe/joins, backfill parity, band invariants, portfolio caps,
+scoring reproducibility, membership integrity, pre-registration honesty (scored ⇒ passed
+gate; killed ⇒ zero weight), risk-brake re-derivation, PIT strict-`<`, shadow isolation,
+cap-lift switch-off. **98/98 green.**
+
+### The frontend (2026-07-03)
+React SPA (`web_ui/`): sidebar, 6 pages — Overview (regime+risk hero, log equity curve),
+Idea Cards (confidence rings → **thesis drill-down drawer** with exact pillar waterfall),
+Risk (brake ladder, concentration), Research & Verdicts (the full ledger), Funds, Events.
+Emerald+cyan glass on deep navy, CVD-validated chart palette, framer-motion animation.
+Served with basic auth by the stdlib Python server; legacy HTML kept at `/legacy`.
+
+### How to run everything
+```powershell
+py -3.14 data_extraction\web\serve_dashboard.py   # UI + API -> http://localhost:8765 (admin/micc)
+py -3.14 data_extraction\common\verify_phases.py  # 98-check audit
+py -3.14 automation\status.py                     # heartbeats, streak x/10, timeout headroom
+py -3.14 data_extraction\run_pipeline.py          # manual daily (scheduler does this at 18:30)
+py -3.14 automation\backup_db.py --drill          # restore drill (monthly habit)
+cd web_ui; npm run build                          # rebuild UI after frontend changes
+```
+
+### What honestly remains (all time-gated, none build-gated)
+1. **10-green-runs acceptance gate** — streak 0/10; the scheduler proves itself over ~2 weeks.
+2. **Event-thesis promotion** — ~mid-2027 (shadow sample accrues daily).
+3. **True PEAD** — needs ≥12 PIT quarters (~2028); proxy stays context.
+4. **Learning-loop weight proposals** — need ≥30 closed scored trades/pillar (months away).
+5. **Live capital** — 12–18 months of paper record + hit-rate/Sharpe/DD thresholds +
+   Kite static IP. Explicitly not a 2026 decision.
 
 ---
 
