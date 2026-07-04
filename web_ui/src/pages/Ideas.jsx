@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 import { api, C, fmt } from "../lib/api";
-import { Glass, Section, Pill, Loading, useApi, tooltipStyle } from "../components/ui";
+import { Glass, Section, Pill, useApi, tooltipStyle, CardGridSkeleton, ErrorState } from "../components/ui";
+import { EASE_OUT, springDrawer, stagger } from "../lib/motion";
 
 const PILLAR_ORDER = ["signal_strength", "trend_align", "regime_align", "confirmation",
                       "liquidity_capacity", "event_score", "risk_penalty"];
@@ -11,7 +12,14 @@ export default function Ideas() {
   const ideas = useApi(() => api("/api/ideas"));
   const [open, setOpen] = useState(null); // selected card
 
-  if (!ideas.data) return <Loading />;
+  if (ideas.err) return <ErrorState error={ideas.err} retry={ideas.retry} />;
+  if (!ideas.data) {
+    return (
+      <Section title="Idea cards" sub="loading…">
+        <CardGridSkeleton />
+      </Section>
+    );
+  }
   const { cards, card_date, n } = ideas.data;
 
   return (
@@ -19,12 +27,8 @@ export default function Ideas() {
       <Section title="Idea cards" sub={`${n} live · ${card_date} · ATR bands, stop ≤10%, equal rupee-risk · click a card for the full thesis`}>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((c, i) => (
-            <motion.div
-              key={c.symbol}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.03, 0.6), duration: 0.3 }}
-            >
+            <motion.div key={c.symbol} {...stagger(i, { delay: 0.025, cap: 0.5 })}
+                        whileTap={{ scale: 0.985 }} className="select-none">
               <Glass hover className="cursor-pointer p-4" onClick={() => setOpen(c)}>
                 <div className="flex items-start justify-between">
                   <div>
@@ -79,7 +83,7 @@ function ConfRing({ v }) {
           cx="22" cy="22" r={r} fill="none" stroke={tone} strokeWidth="4" strokeLinecap="round"
           initial={{ strokeDasharray: circ, strokeDashoffset: circ }}
           animate={{ strokeDashoffset: circ * (1 - v / 100) }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
+          transition={{ duration: 1, ease: EASE_OUT, delay: 0.1 }}
         />
       </svg>
       <span className="num absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-slate-200">
@@ -103,19 +107,21 @@ function ThesisDrawer({ card, onClose }) {
       <motion.div
         className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
         onClick={onClose}
       />
       <motion.aside
         className="fixed right-0 top-0 z-50 h-full w-[480px] overflow-y-auto border-l border-white/10 bg-navy-900/95 p-6 backdrop-blur-2xl"
         initial={{ x: 500 }} animate={{ x: 0 }} exit={{ x: 500 }}
-        transition={{ type: "spring", stiffness: 320, damping: 34 }}
+        transition={springDrawer}
       >
         <div className="flex items-start justify-between">
           <div>
             <div className="text-xl font-bold text-slate-100">{card.symbol}</div>
             <div className="text-xs text-slate-500">{card.company} · {card.sector || "—"}</div>
           </div>
-          <button onClick={onClose} className="rounded-lg border border-white/10 px-2.5 py-1 text-slate-400 hover:bg-white/5">✕</button>
+          <motion.button whileTap={{ scale: 0.92 }} onClick={onClose}
+            className="rounded-lg border border-white/10 px-2.5 py-1 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200">✕</motion.button>
         </div>
 
         <div className="mt-4 flex gap-2">
@@ -134,7 +140,7 @@ function ThesisDrawer({ card, onClose }) {
             <motion.div
               className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-white bg-cyan-500 shadow-[0_0_12px_rgba(8,145,178,.8)]"
               initial={{ left: 0 }} animate={{ left: `calc(${pct(range.entry)}% - 8px)` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: 0.9, ease: EASE_OUT, delay: 0.15 }}
             />
           </div>
           <div className="mt-1.5 text-center text-[11px] text-slate-400">
@@ -144,7 +150,7 @@ function ThesisDrawer({ card, onClose }) {
 
         {/* pillar waterfall */}
         <div className="mt-7">
-          <div className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+          <div className="label mb-2">
             Why {card.confidence_score.toFixed(1)} — pillar contributions (exact, linear)
           </div>
           <Glass className="p-3">
@@ -158,6 +164,7 @@ function ThesisDrawer({ card, onClose }) {
                 />
                 <ReferenceLine x={0} stroke="rgba(255,255,255,.15)" />
                 <Bar dataKey="contribution" radius={[4, 4, 4, 4]} barSize={14}
+                     animationDuration={700} animationEasing="ease-out"
                      label={{ position: "right", fill: "#94a3b8", fontSize: 11,
                               formatter: (v) => (v > 0 ? "+" : "") + v.toFixed(1) }}>
                   {pillars.map((p, i) => (
@@ -172,7 +179,7 @@ function ThesisDrawer({ card, onClose }) {
         {/* context tags (zero weight) */}
         {card.context && Object.keys(card.context).length > 0 && (
           <div className="mt-6">
-            <div className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-500">Context (display-only, zero weight)</div>
+            <div className="label mb-2">Context (display-only, zero weight)</div>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(card.context).map(([k, v]) => (
                 <Pill key={k} tone="slate">{k.replace(/_/g, " ")}: {String(v)}</Pill>

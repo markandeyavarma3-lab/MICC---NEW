@@ -1,7 +1,12 @@
 import { useMemo } from "react";
+import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { api, C, fmt } from "../lib/api";
-import { Glass, Section, Stat, Badge, Pill, Loading, useApi, tooltipStyle, CountUp } from "../components/ui";
+import {
+  Glass, Section, Stat, Badge, Pill, useApi, tooltipStyle, CountUp,
+  StatSkeleton, ChartSkeleton, ErrorState,
+} from "../components/ui";
+import { EASE_OUT } from "../lib/motion";
 
 export default function Overview() {
   const regime = useApi(() => api("/api/regime"));
@@ -22,7 +27,19 @@ export default function Overview() {
     [best.data]
   );
 
-  if (!regime.data || !risk.data) return <Loading />;
+  if (regime.err || risk.err) return <ErrorState error={regime.err || risk.err} retry={regime.retry} />;
+  if (!regime.data || !risk.data) {
+    return (
+      <>
+        <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Glass className="p-6 lg:col-span-2"><StatSkeleton n={1} /></Glass>
+          <Glass className="p-6"><StatSkeleton n={1} /></Glass>
+        </div>
+        <StatSkeleton n={6} />
+        <div className="mt-8"><ChartSkeleton /></div>
+      </>
+    );
+  }
 
   const r = regime.data;
   const riskOn = r.pct_above_200dma >= 50; // display only; votes below are the gate
@@ -36,9 +53,11 @@ export default function Overview() {
     <>
       {/* ===== HERO: regime + risk state ===== */}
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Glass className={`relative overflow-hidden p-6 lg:col-span-2 ${gateOn ? "" : ""}`}>
-          <div
+        <Glass className="relative overflow-hidden p-6 lg:col-span-2">
+          <motion.div
+            key={gateOn ? "on" : "off"}
             className="pointer-events-none absolute inset-0"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, ease: EASE_OUT }}
             style={{
               background: gateOn
                 ? "radial-gradient(600px 200px at 20% 0%, rgba(16,185,129,.18), transparent 60%)"
@@ -46,9 +65,9 @@ export default function Overview() {
             }}
           />
           <div className="relative">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Market regime · 4-vote gate</div>
+            <div className="label">Market regime · 4-vote gate</div>
             <div className="mt-2 flex items-center gap-4">
-              <span className={`text-4xl font-bold tracking-tight ${gateOn ? "text-emerald-300" : "text-red-300"}`}>
+              <span className={`text-4xl font-bold tracking-tight transition-colors duration-500 ${gateOn ? "text-emerald-300" : "text-red-300"}`}>
                 {gateOn ? "RISK-ON" : "RISK-OFF"}
               </span>
               <span className="num text-xl text-slate-400">{votes ?? "—"}/4</span>
@@ -63,13 +82,13 @@ export default function Overview() {
         </Glass>
 
         <Glass className="p-6">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Risk meta-engine</div>
+          <div className="label">Risk meta-engine</div>
           <div className="mt-3 space-y-2.5 text-[13px]">
-            <Row k="Drawdown" v={fmt.pct(rc.drawdown_pct)} warn={rc.drawdown_pct >= 0.10} />
-            <Row k="Budget multiplier" v={`×${rc.risk_budget_mult ?? "—"}`} warn={rc.risk_budget_mult < 1} />
-            <Row k="Loss streak" v={rc.consec_losses ?? "—"} warn={rc.consec_losses >= 3} />
-            <Row k="Holdings corr (60d)" v={fmt.num(rc.avg_pairwise_corr)} warn={rc.avg_pairwise_corr > 0.6} />
-            <Row k="New cards" v={rc.halt_new_cards ? "HALTED" : "allowed"} warn={!!rc.halt_new_cards} />
+            <Row k="Drawdown" v={rc.drawdown_pct} format={fmt.pct} warn={rc.drawdown_pct >= 0.10} />
+            <Row k="Budget multiplier" v={rc.risk_budget_mult} format={(x) => `×${x}`} warn={rc.risk_budget_mult < 1} />
+            <Row k="Loss streak" v={rc.consec_losses} warn={rc.consec_losses >= 3} />
+            <Row k="Holdings corr (60d)" v={rc.avg_pairwise_corr} format={(x) => fmt.num(x)} warn={rc.avg_pairwise_corr > 0.6} />
+            <Row k="New cards" v={rc.halt_new_cards ? "HALTED" : "allowed"} warn={!!rc.halt_new_cards} static />
           </div>
         </Glass>
       </div>
@@ -105,10 +124,11 @@ export default function Overview() {
                   contentStyle={tooltipStyle}
                   formatter={(v, name) => (name === "equity" ? [Number(v).toFixed(2) + "x", "equity"] : [fmt.pct(v), "drawdown"])}
                 />
-                <Area type="monotone" dataKey="equity" stroke={C.cyan} strokeWidth={2} fill="url(#eq)" dot={false} />
+                <Area type="monotone" dataKey="equity" stroke={C.cyan} strokeWidth={2} fill="url(#eq)" dot={false}
+                      animationDuration={900} animationEasing="ease-out" />
               </AreaChart>
             </ResponsiveContainer>
-          ) : <Loading />}
+          ) : <ChartSkeleton />}
         </Glass>
       </Section>
 
@@ -125,11 +145,13 @@ export default function Overview() {
   );
 }
 
-function Row({ k, v, warn }) {
+function Row({ k, v, format, warn, static: isStatic }) {
   return (
-    <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
+    <div className="flex items-center justify-between border-b border-white/[0.05] pb-2 last:border-0 last:pb-0">
       <span className="text-slate-400">{k}</span>
-      <span className={`num font-medium ${warn ? "text-amber-300" : "text-slate-200"}`}>{v}</span>
+      <span className={`num font-medium transition-colors duration-300 ${warn ? "text-amber-300" : "text-slate-200"}`}>
+        {!isStatic && typeof v === "number" ? <CountUp value={v} format={format || ((x) => x.toFixed(0))} duration={0.6} /> : (v ?? "—")}
+      </span>
     </div>
   );
 }

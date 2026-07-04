@@ -1,12 +1,24 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { api, C, fmt } from "../lib/api";
-import { Glass, Section, Pill, Table, Loading, useApi, tooltipStyle } from "../components/ui";
+import { Glass, Section, Pill, Table, useApi, tooltipStyle, TableSkeleton, ChartSkeleton, ErrorState } from "../components/ui";
+import { useSymbol } from "../lib/symbolContext";
 
 const TIER_TONE = { scored: "emerald", context: "slate", risk: "red" };
 
 export default function Events() {
   const ev = useApi(() => api("/api/events"));
-  if (!ev.data) return <Loading />;
+  const { open: openSymbol } = useSymbol();
+  if (ev.err) return <ErrorState error={ev.err} retry={ev.retry} />;
+  if (!ev.data) {
+    return (
+      <>
+        <Section title="Event shadow scoreboard" sub="loading…"><TableSkeleton rows={6} cols={6} /></Section>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <TableSkeleton rows={6} cols={4} /><ChartSkeleton height={200} />
+        </div>
+      </>
+    );
+  }
   const { recent, shadow, tags } = ev.data;
   const tagData = tags.filter((t) => t.tag !== "other" && t.tag !== "meeting_admin").slice(0, 10);
 
@@ -37,9 +49,14 @@ export default function Events() {
             <Table
               cols={["Date", "Symbol", "Type", "Tier"]}
               rows={recent}
+              searchKeys={[(r) => r.symbol, (r) => r.event_type]}
+              sortAccessors={[(r) => r.event_date, (r) => r.symbol, (r) => r.event_type, (r) => r.evidence_tier]}
               render={(r) => [
                 <span className="num text-slate-400">{r.event_date}</span>,
-                <span className="font-medium text-slate-200">{r.symbol}</span>,
+                <button onClick={() => openSymbol(r.symbol)}
+                        className="font-medium text-slate-200 underline decoration-white/20 underline-offset-2 transition-colors hover:text-cyan-300 hover:decoration-cyan-300/50">
+                  {r.symbol}
+                </button>,
                 r.event_type,
                 <Pill tone={TIER_TONE[r.evidence_tier] || "slate"}>{r.evidence_tier}</Pill>,
               ]}
@@ -55,6 +72,7 @@ export default function Events() {
                 <YAxis type="category" dataKey="tag" width={130} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v.toLocaleString(), "count"]} />
                 <Bar dataKey="n" fill={C.violet} radius={[4, 4, 4, 4]} barSize={16}
+                     animationDuration={700} animationEasing="ease-out"
                      label={{ position: "right", fill: "#94a3b8", fontSize: 11 }} />
               </BarChart>
             </ResponsiveContainer>

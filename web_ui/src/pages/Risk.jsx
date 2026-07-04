@@ -1,6 +1,8 @@
+import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api, C, fmt } from "../lib/api";
-import { Glass, Section, Stat, Pill, Loading, useApi, tooltipStyle } from "../components/ui";
+import { Glass, Section, Stat, Pill, useApi, tooltipStyle, StatSkeleton, ChartSkeleton, ErrorState } from "../components/ui";
+import { springPill } from "../lib/motion";
 
 const BRAKES = [
   { band: "DD < 10%", mult: "×1.00" },
@@ -12,7 +14,17 @@ const BRAKES = [
 export default function Risk() {
   const risk = useApi(() => api("/api/risk"));
   const ideas = useApi(() => api("/api/ideas"));
-  if (!risk.data) return <Loading />;
+  if (risk.err) return <ErrorState error={risk.err} retry={risk.retry} />;
+  if (!risk.data) {
+    return (
+      <>
+        <StatSkeleton n={5} />
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ChartSkeleton height={200} /><ChartSkeleton height={200} />
+        </div>
+      </>
+    );
+  }
   const rc = risk.data.current || {};
   const conc = JSON.parse(rc.sector_concentration_json || "{}");
   const concData = Object.entries(conc).map(([sector, share]) => ({ sector, share }));
@@ -38,11 +50,15 @@ export default function Risk() {
           <Glass className="p-4">
             {BRAKES.map((b, i) => (
               <div key={b.band}
-                   className={`mb-2 flex items-center justify-between rounded-xl border px-4 py-3 text-[13px]
-                     ${i === ddBand ? "border-cyan-500/40 bg-cyan-500/10 text-slate-100"
-                                    : "border-white/[0.06] text-slate-400"}`}>
-                <span>{b.band}</span>
-                <span className="num font-medium">{b.mult}</span>
+                   className={`relative mb-2 flex items-center justify-between rounded-xl border border-transparent px-4 py-3 text-[13px] transition-colors duration-300
+                     ${i === ddBand ? "text-slate-100" : "text-slate-400"}`}>
+                {i === ddBand && (
+                  <motion.div layoutId="dd-band" className="absolute inset-0 rounded-xl border border-cyan-500/40 bg-cyan-500/10"
+                              transition={springPill} />
+                )}
+                {i !== ddBand && <div className="absolute inset-0 rounded-xl border border-white/[0.06]" />}
+                <span className="relative z-10">{b.band}</span>
+                <span className="relative z-10 num font-medium">{b.mult}</span>
                 {i === ddBand && <Pill tone="cyan">current</Pill>}
               </div>
             ))}
@@ -62,6 +78,7 @@ export default function Risk() {
                   <YAxis type="category" dataKey="sector" width={150} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v) => [fmt.pct(v, 1), "share"]} />
                   <Bar dataKey="share" radius={[4, 4, 4, 4]} barSize={16}
+                       animationDuration={700} animationEasing="ease-out"
                        label={{ position: "right", fill: "#94a3b8", fontSize: 11, formatter: (v) => (v * 100).toFixed(0) + "%" }}>
                     {concData.map((d, i) => (
                       <Cell key={i} fill={d.share > 0.30 ? C.amber : C.cyan} />

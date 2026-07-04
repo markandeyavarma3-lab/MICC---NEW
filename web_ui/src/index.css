@@ -6,6 +6,10 @@
   --color-navy-800: #101b30;
   --font-sans: ui-sans-serif, "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", ui-monospace, "Consolas", monospace;
+  /* shared easing: a considered "expo-out" feel (Stripe/Vercel-style settle),
+     tuned once here rather than ad hoc per component */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html, body, #root { height: 100%; }
@@ -14,6 +18,8 @@ body {
   background-color: var(--color-navy-950);
   color: #e2e8f0;
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   /* ambient glass glows */
   background-image:
     radial-gradient(1200px 600px at 85% -10%, rgba(8, 145, 178, 0.13), transparent 60%),
@@ -22,19 +28,40 @@ body {
   background-attachment: fixed;
 }
 
-/* glass card */
+/* glass card — layered depth: soft ambient shadow + tight contact shadow +
+   a hairline top highlight (light catching the top inner edge of the panel) */
 .glass {
+  position: relative;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  transition: border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 6px rgba(0, 0, 0, 0.18),
+    0 16px 40px -8px rgba(0, 0, 0, 0.35);
+  transition: border-color .3s var(--ease-out-soft), transform .3s var(--ease-out-soft),
+              box-shadow .3s var(--ease-out-soft);
 }
 .glass-hover:hover {
-  border-color: rgba(34, 211, 238, 0.35);
+  border-color: rgba(34, 211, 238, 0.32);
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(8, 145, 178, 0.12);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    0 20px 48px -8px rgba(8, 145, 178, 0.16);
+}
+.glass-hover:active { transform: translateY(-1px) scale(0.995); }
+
+/* eyebrow / caption label — the ONE treatment for small uppercase headers,
+   replacing the handful of near-duplicate ad hoc variants that had drifted
+   across pages (11px/10px, 0.14em/0.16em/0.2em tracking) */
+.label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #64748b; /* slate-500 */
 }
 
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -42,8 +69,27 @@ body {
 /* recessive scrollbars */
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.18); }
 *::-webkit-scrollbar-track { background: transparent; }
 
 /* recharts dark polish */
 .recharts-cartesian-grid line { stroke: rgba(255,255,255,0.05); }
 .recharts-text { fill: #64748b; font-size: 11px; font-family: var(--font-mono); }
+
+/* skeleton shimmer for loading states */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.04) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important; }
+}

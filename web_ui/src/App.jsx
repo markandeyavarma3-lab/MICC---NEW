@@ -6,21 +6,24 @@ import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import Funds from "./pages/Funds";
 import Events from "./pages/Events";
+import { SymbolProvider } from "./lib/symbolContext";
 
 // HashRouter so the Python static server needs no SPA-fallback routing.
 export default function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Overview />} />
-          <Route path="/ideas" element={<Ideas />} />
-          <Route path="/risk" element={<Risk />} />
-          <Route path="/research" element={<Research />} />
-          <Route path="/funds" element={<Funds />} />
-          <Route path="/events" element={<Events />} />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <SymbolProvider>
+      <HashRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Overview />} />
+            <Route path="/ideas" element={<Ideas />} />
+            <Route path="/risk" element={<Risk />} />
+            <Route path="/research" element={<Research />} />
+            <Route path="/funds" element={<Funds />} />
+            <Route path="/events" element={<Events />} />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </SymbolProvider>
   );
 }

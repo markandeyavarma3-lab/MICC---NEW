@@ -1,5 +1,7 @@
+import { motion } from "framer-motion";
 import { api, fmt } from "../lib/api";
-import { Glass, Section, Pill, Table, Loading, useApi } from "../components/ui";
+import { Glass, Section, Pill, Table, useApi, TableSkeleton, ErrorState } from "../components/ui";
+import { stagger } from "../lib/motion";
 
 const VERDICT_TONE = { scored: "emerald", context: "slate", killed: "red",
                        pending_depth: "amber", passed: "emerald" };
@@ -7,7 +9,17 @@ const VERDICT_TONE = { scored: "emerald", context: "slate", killed: "red",
 export default function Research() {
   const v = useApi(() => api("/api/verdicts"));
   const rev = useApi(() => api("/api/review"));
-  if (!v.data) return <Loading />;
+  if (v.err) return <ErrorState error={v.err} retry={v.retry} />;
+  if (!v.data) {
+    return (
+      <>
+        <Section title="The verdict ledger" sub="loading…"><TableSkeleton rows={8} cols={4} /></Section>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <TableSkeleton rows={5} cols={5} /><TableSkeleton rows={5} cols={2} />
+        </div>
+      </>
+    );
+  }
   const { preregistration, candidates, events, spine, ml_experiments, ml_paths, exit_calibration } = v.data;
 
   const mlBy = {};
@@ -21,6 +33,8 @@ export default function Research() {
           <Table
             cols={["Signal", "Status", "Test", "Kill / notes"]}
             rows={preregistration}
+            searchKeys={[(r) => r.signal, (r) => r.status, (r) => r.test, (r) => r.notes]}
+            sortAccessors={[(r) => r.signal, (r) => r.status, null, null]}
             render={(r) => [
               <span className="font-medium text-slate-200">{r.signal}</span>,
               <Pill tone={VERDICT_TONE[r.status] || "slate"}>{r.status}</Pill>,
@@ -37,6 +51,7 @@ export default function Research() {
             <Table
               cols={["Candidate", "IC", "t", "H1 → H2", "Verdict"]}
               rows={candidates}
+              sortAccessors={[(r) => r.candidate, (r) => r.mean_ic, (r) => r.t_stat, null, (r) => r.verdict]}
               render={(r) => [
                 r.candidate,
                 <span className="num">{fmt.num(r.mean_ic, 4)}</span>,
@@ -50,17 +65,19 @@ export default function Research() {
 
         <Section title="ML challengers under CPCV" sub="15 purged paths · promotion needs beat-champion AND DSR>0.5 AND stability">
           <Glass className="p-4">
-            {ml_experiments.map((e) => (
-              <div key={e.exp_id} className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3">
+            {ml_experiments.map((e, i) => (
+              <motion.div key={e.exp_id} {...stagger(i, { cap: 0.3 })}
+                          className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">
                 <div>
                   <span className="font-medium text-slate-200">{e.model_family}</span>
                   <span className="ml-2 text-[11px] text-slate-500">median path Sharpe <span className="num">{fmt.num(med(mlBy[e.model_family] || []), 2)}</span> vs champion 1.00</span>
                 </div>
                 <Pill tone={VERDICT_TONE[e.status] || "slate"}>{e.status}</Pill>
-              </div>
+              </motion.div>
             ))}
-            {events.map((e) => (
-              <div key={e.event_type} className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3">
+            {events.map((e, i) => (
+              <motion.div key={e.event_type} {...stagger(i, { cap: 0.3 })}
+                          className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">
                 <div>
                   <span className="font-medium text-slate-200">{e.event_type}</span>
                   <span className="ml-2 text-[11px] text-slate-500">
@@ -68,10 +85,10 @@ export default function Research() {
                   </span>
                 </div>
                 <Pill tone={VERDICT_TONE[e.verdict]}>{e.verdict}</Pill>
-              </div>
+              </motion.div>
             ))}
             {spine.filter((s) => s.book === "IV").map((s) => (
-              <div key={s.book} className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3">
+              <div key={s.book} className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">
                 <div>
                   <span className="font-medium text-slate-200">regime spine</span>
                   <span className="ml-2 text-[11px] text-slate-500">
@@ -111,7 +128,7 @@ export default function Research() {
             </pre>
             {rev.data.weights?.length > 0 && (
               <div className="mt-4 border-t border-white/[0.06] pt-4">
-                <div className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-500">Weight versions</div>
+                <div className="label mb-2">Weight versions</div>
                 <WeightGrid weights={rev.data.weights} />
               </div>
             )}
