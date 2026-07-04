@@ -643,6 +643,205 @@ def main():
     else:
         print("  (P9 scoring tests skipped -- score_weights not seeded yet [Stage 4])", flush=True)
 
+    # ============ PART 4 STAGE 1: shareholding-pattern acquisition ============
+    if "shp_filing" in tables and q("SELECT COUNT(*) FROM shp_filing")[0] > 0:
+        print("Verifying Part 4 Stage 1: SHP acquisition ...", flush=True)
+        # S1 PIT sanity: every row has a pit_date and it is >= quarter_end_date
+        # (a filing cannot be knowable before its reporting period ends)
+        badp = q("SELECT COUNT(*) FROM shp_filing WHERE pit_date IS NULL "
+                 "OR pit_date < quarter_end_date")[0]
+        check(badp == 0, "S1 SHP pit_date present and >= quarter_end_date", f"bad={badp}")
+        # S2 exactly one current version per (scrip, quarter)
+        dup = q("SELECT COUNT(*) FROM (SELECT scrip_code,qtrid FROM shp_filing "
+                "WHERE is_current_version=1 GROUP BY scrip_code,qtrid "
+                "HAVING COUNT(*)>1)")[0]
+        check(dup == 0, "S2 SHP one current version per scrip-quarter", f"dups={dup}")
+        # S3 revision chain integrity: pointer resolves, same scrip+qtr, old row
+        # demoted, and where both hashes exist the contents actually changed
+        badr = q("""SELECT COUNT(*) FROM shp_filing n LEFT JOIN shp_filing o
+                    ON o.filing_id=n.is_revision_of
+                    WHERE n.is_revision_of IS NOT NULL AND (o.filing_id IS NULL
+                       OR o.scrip_code<>n.scrip_code OR o.qtrid<>n.qtrid
+                       OR o.is_current_version<>0)""")[0]
+        samehash = q("""SELECT COUNT(*) FROM shp_filing n JOIN shp_filing o
+                        ON o.filing_id=n.is_revision_of
+                        WHERE n.file_hash IS NOT NULL AND o.file_hash IS NOT NULL
+                          AND n.file_hash=o.file_hash""")[0]
+        nrev = q("SELECT COUNT(*) FROM shp_filing WHERE is_revision_of IS NOT NULL")[0]
+        check(badr == 0 and samehash == 0,
+              "S3 SHP revision chain valid, revised content differs by hash",
+              f"chains={nrev} broken={badr} same-hash={samehash}")
+        # S4 parse accuracy invariant: grand-total row (STABC) pct ~ 100
+        tot = q("""SELECT COUNT(DISTINCT f.filing_id) FROM shp_filing f
+                   WHERE f.parse_status='parsed'""")[0]
+        good = q("""SELECT COUNT(DISTINCT f.filing_id) FROM shp_filing f
+                    JOIN shp_category_summary s USING(filing_id)
+                    WHERE f.parse_status='parsed' AND s.category_code='STABC'
+                      AND s.pct_holding BETWEEN 99.5 AND 100.5""")[0]
+        check(tot > 0 and good >= 0.99 * tot,
+              "S4 SHP grand total ~100% on >=99% of parsed filings", f"{good}/{tot}")
+        # S5 fetcher completeness on the latest COMPLETE quarter: of the current-version
+        # filings enumerated for that quarter, what % got Table I parsed. Uses
+        # quarter_end_date (robust to BSE's fractional qtrids like 129.01) and skips the
+        # in-progress current quarter. Should be ~100% once the backfill reaches it
+        # (newest quarters are parsed first). <90% => backfill still running or a gap.
+        lqe = q("""SELECT quarter_end_date FROM shp_filing
+                   WHERE quarter_end_date < date('now')
+                   GROUP BY quarter_end_date HAVING COUNT(*)>=500
+                   ORDER BY quarter_end_date DESC LIMIT 1""")
+        if lqe:
+            lqe = lqe[0]
+            covm = q("""SELECT
+                    SUM(CASE WHEN exchange_segment='mainboard' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN exchange_segment='mainboard' AND parse_status='parsed'
+                        THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN exchange_segment='sme' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN exchange_segment='sme' AND parse_status='parsed'
+                        THEN 1 ELSE 0 END)
+                    FROM shp_filing WHERE is_current_version=1 AND quarter_end_date=?""", (lqe,))
+            mb = covm[1] / covm[0] if covm[0] else 0
+            sm = covm[3] / covm[2] if covm[2] else 1
+            check(mb >= 0.90, "S5 SHP latest-complete-quarter Table I parsed (mainboard >=90%)",
+                  f"{lqe}: mainboard {covm[1]}/{covm[0]} ({mb:.0%}), "
+                  f"sme {covm[3]}/{covm[2]} ({sm:.0%})")
+        else:
+            print("  (S5 skipped -- no complete quarter with >=500 filings yet)", flush=True)
+        # S6 cross-source spot-check: promoter % vs NSE-sourced shareholding_history
+        # (independent exchange, independent fetcher) matched via ISIN + quarter
+        xs = conn.execute("""
+            SELECT f.scrip_code, s.pct_holding AS bse_pct, sh.promoter_pct AS nse_pct
+            FROM shp_filing f
+            JOIN shp_category_summary s ON s.filing_id=f.filing_id
+                 AND s.category_code='STA1A2'
+            JOIN isin_master im ON im.isin=f.isin
+            JOIN shareholding_history sh ON sh.symbol=im.symbol
+                 AND sh.quarter = substr(f.quarter_end_date,1,4) || '-Q' ||
+                     ((CAST(substr(f.quarter_end_date,6,2) AS INTEGER)+2)/3)
+            WHERE f.is_current_version=1 AND f.parse_status='parsed'
+              AND sh.promoter_pct IS NOT NULL""").fetchall()
+        if xs:
+            okx = sum(1 for _, b, n_ in xs if abs(b - n_) <= 1.0)
+            check(okx >= 0.80 * len(xs),
+                  "S6 SHP promoter% agrees with NSE source (+/-1pp on >=80% of overlaps)",
+                  f"{okx}/{len(xs)} within 1pp")
+        else:
+            print("  (S6 cross-source skipped -- no ISIN/quarter overlap with "
+                  "shareholding_history yet)", flush=True)
+        # S7 revised version never predates the original filing
+        badt = q("""SELECT COUNT(*) FROM shp_filing
+                    WHERE first_filed_datetime IS NOT NULL
+                      AND broadcast_datetime < first_filed_datetime""")[0]
+        check(badt == 0, "S7 SHP broadcast_datetime >= first_filed_datetime", f"bad={badt}")
+        # S8 institutional (Table III) internal consistency: narrow FPI (Cat I + Cat
+        # II) should reconcile with the B2 (Institutions-Foreign) subtotal row -- a
+        # structural check that the FPI/DII split needed for the SHP pre-registration
+        # signals (shp_fpi_delta / shp_dii_delta) is parsed correctly, not just present
+        if "shp_institutional_summary" in tables and q(
+                "SELECT COUNT(*) FROM shp_institutional_summary")[0] > 0:
+            # aggregate FPI (Cat I + Cat II, is_aggregate=1 rows only -- NOT the nested
+            # named-holder rows) must be <= the Institutions-Foreign (B2) subtotal, since
+            # B2 also includes FDI / other-foreign. Equality holds when those are zero.
+            recon = conn.execute("""
+                SELECT f.filing_id,
+                       (SELECT SUM(pct_holding) FROM shp_institutional_summary s
+                        WHERE s.filing_id=f.filing_id AND s.is_aggregate=1
+                          AND s.level LIKE 'Foreign Portfolio Investors%') AS fpi_agg,
+                       (SELECT pct_holding FROM shp_institutional_summary s
+                        WHERE s.filing_id=f.filing_id AND s.level='Sub Total B2') AS b2
+                FROM shp_filing f
+                WHERE f.filing_id IN (SELECT DISTINCT filing_id FROM shp_institutional_summary)
+            """).fetchall()
+            # only reconcile where B2 is actually populated: BSE's SHP format changed
+            # ~Sep 2022. Pre-break the B1/B2 (domestic/foreign) subtotals read 0 and
+            # institutions are lumped, so B2 is not a valid anchor then (the FPI line
+            # itself is still populated -- see the coverage audit's format-break section).
+            checkable = [(fpi, b2) for _, fpi, b2 in recon
+                         if fpi is not None and b2 is not None and b2 > 0]
+            badf = sum(1 for fpi, b2 in checkable if fpi - b2 > 0.5)  # FPI must not EXCEED B2
+            check(len(checkable) > 0 and badf <= 0.02 * len(checkable),
+                  "S8 SHP aggregate FPI (CatI+II) <= Institutions-Foreign subtotal (new-format)",
+                  f"{len(checkable)-badf}/{len(checkable)} (B2>0 filings only)")
+        else:
+            print("  (S8 skipped -- shp_institutional_summary empty [FPI/DII parser just added])",
+                  flush=True)
+        # S9 PIT-floor enforcement (Stage 2): no PARSED filing may be a retro-upload.
+        # Every parsed Table I / Table III row must come from a real-time-filed filing
+        # (broadcast within the trust window of quarter-end) -- otherwise a future
+        # signal test could align a quarter to data that was only posted years later.
+        LAG_FLOOR = 400
+        badret = q("""SELECT COUNT(*) FROM shp_filing
+                      WHERE parse_status='parsed'
+                        AND (pit_date IS NULL
+                             OR julianday(pit_date)-julianday(quarter_end_date) > ?)""",
+                   (LAG_FLOOR,))[0]
+        badinst = q(f"""SELECT COUNT(*) FROM shp_institutional_summary s
+                        JOIN shp_filing f ON f.filing_id=s.filing_id
+                        WHERE f.pit_date IS NULL
+                           OR julianday(f.pit_date)-julianday(f.quarter_end_date) > {LAG_FLOOR}""")[0]
+        check(badret == 0 and badinst == 0,
+              "S9 SHP no parsed row from a retro-upload (PIT floor enforced)",
+              f"tblI_bad={badret} tblIII_bad={badinst}")
+
+        # ---- Stage 3: survivorship-free PIT universe integrity ----
+        if "shp_pit_universe" in tables and q("SELECT COUNT(*) FROM shp_pit_universe")[0] > 0:
+            # S10 the denominator is the survivorship-free spine, NOT today's active
+            # list: delisted-today names must appear in historical quarters in bulk
+            ndel = q("SELECT COUNT(DISTINCT symbol) FROM shp_pit_universe "
+                     "WHERE delisted_today=1")[0]
+            ndel16 = q("SELECT COUNT(*) FROM shp_pit_universe "
+                       "WHERE delisted_today=1 AND quarter_end LIKE '2016%'")[0]
+            check(ndel >= 300 and ndel16 >= 500,
+                  "S10 SHP universe denominator is survivorship-free "
+                  "(delisted-today names present in history)",
+                  f"delisted symbols={ndel}, 2016 delisted cells={ndel16}")
+            # S11 the join can't smuggle in PIT-poison: every 'present' cell's
+            # filing satisfies the same lag gate the fetcher enforces
+            badp = q(f"""SELECT COUNT(*) FROM shp_pit_universe u
+                         JOIN shp_filing f ON f.filing_id=u.filing_id
+                         WHERE u.shp_status='present'
+                           AND (f.pit_date IS NULL OR
+                                julianday(f.pit_date)-julianday(f.quarter_end_date)
+                                > {LAG_FLOOR})""")[0]
+            check(badp == 0, "S11 SHP every 'present' universe cell is PIT-lag-gated",
+                  f"bad={badp}")
+            # S12 exactly-one-status integrity: present <=> filing_id set; the
+            # missing split must agree with the delisted-today flag
+            bads = q("""SELECT COUNT(*) FROM shp_pit_universe WHERE
+                          (shp_status='present') != (filing_id IS NOT NULL)
+                       OR (shp_status='missing_delisted' AND delisted_today=0)
+                       OR (shp_status='missing_active' AND delisted_today=1)
+                       OR shp_status NOT IN
+                          ('present','missing_active','missing_delisted')""")[0]
+            check(bads == 0, "S12 SHP universe status/flag consistency", f"bad={bads}")
+            # S13 recovery integrity: targets were genuinely dead-listed, outcomes
+            # re-derivable (recovered => lag-gated filings actually exist)
+            if "shp_recovery_log" in tables and q(
+                    "SELECT COUNT(*) FROM shp_recovery_log")[0] > 0:
+                badt = q("""SELECT COUNT(*) FROM shp_recovery_log l
+                            LEFT JOIN bse_scrip_master m ON m.scrip_code=l.scrip_code
+                            WHERE m.scrip_code IS NULL OR m.listing_status='Active'""")[0]
+                badr = q(f"""SELECT COUNT(*) FROM shp_recovery_log l
+                             WHERE l.outcome='recovered' AND NOT EXISTS(
+                               SELECT 1 FROM shp_filing f
+                               WHERE f.scrip_code=l.scrip_code AND f.is_current_version=1
+                                 AND f.pit_date IS NOT NULL
+                                 AND julianday(f.pit_date)-julianday(f.quarter_end_date)
+                                     <= {LAG_FLOOR})""")[0]
+                nrec = q("SELECT COUNT(*) FROM shp_recovery_log "
+                         "WHERE outcome='recovered'")[0]
+                check(badt == 0 and badr == 0,
+                      "S13 SHP recovery log: dead-listed targets only, outcomes re-derivable",
+                      f"recovered={nrec} bad_target={badt} bad_outcome={badr}")
+            else:
+                print("  (S13 skipped -- shp_recovery_log empty [recovery not yet run])",
+                      flush=True)
+        else:
+            print("  (S10-S13 skipped -- shp_pit_universe not built yet [Stage 3])",
+                  flush=True)
+    else:
+        print("  (Part 4 SHP tests skipped -- shp_filing empty [Stage 1 backfill pending])",
+              flush=True)
+
     conn.close()
 
     # ============ REPORT ============
