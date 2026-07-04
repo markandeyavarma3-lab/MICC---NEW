@@ -14,9 +14,12 @@
   run, 1 survivor** (insider cluster buys). Regime spine, ML (CPCV), value/quality, amihud — all
   honestly killed with receipts.
 - 🤖 **Self-governing**: scheduled daily/weekly pipeline, integrity-checked backups + restore drill,
-  ntfy failure alerts, monitor-only learning loop, quarterly auto re-validations — **98/98 pin-to-pin verified**.
-- 🖥️ **React frontend**: glassy dark 6-page SPA at `localhost:8765` (thesis drill-downs, verdict
-  ledger, risk panels) on a live JSON API.
+  ntfy failure alerts, monitor-only learning loop, quarterly auto re-validations — **111/111 pin-to-pin verified**.
+- 🏛️ **Part 4 (in flight)**: quarterly shareholding-pattern warehouse — full BSE universe, PIT-anchored
+  on exchange broadcast time, **survivorship-free** (delisted names recovered via official API; HDFC Ltd
+  itself was in the hole). 5 SHP signals pre-registered, frozen, untested by design.
+- 🖥️ **React frontend**: glassy dark 6-page SPA at `localhost:8765` — thesis drill-downs, verdict
+  ledger, ⌘K command palette, symbol profile drawer, searchable/sortable tables, collapsible sidebar.
 
 **Key docs:** [📄 Research paper](RESEARCH.md) · [🧭 Analysis blueprint](MICC_BLUEPRINT.md) ·
 [🏗️ Part 1](PART1.md) · [📡 Part 2](PART2.md) · [🔁 Part 3](PART3.md) · [🛟 DR runbook](docs/DR_RUNBOOK.md) ·
@@ -24,9 +27,9 @@
 
 ---
 
-## 🧭 The system today — complete state (as of 2026-07-03)
+## 🧭 The system today — complete state (as of 2026-07-05)
 
-> The deep record of what was built across Parts 1–3 + the frontend, how it fits together,
+> The deep record of what was built across Parts 1–4 + the frontend, how it fits together,
 > how to run it, and what honestly remains. Per-part detail: [PART1.md](PART1.md) ·
 > [PART2.md](PART2.md) · [PART3.md](PART3.md). Dated entries: [Progress log](#progress-log) below.
 
@@ -40,9 +43,10 @@
         → signals → recos → rec_sync → RISK STATE → IDEA CARDS → dashboard → monitor
                                           │
         WEEKLY (Fri 19:00): fundamentals, registries, PIT membership, backtests,
-        screener PIT + VALUE GATE, Friday review, quarterly auto-gates, BACKUP
+        screener PIT + VALUE GATE, SHP sweep + scrip master + SHP PIT universe,
+        Friday review, quarterly auto-gates, BACKUP
                                           │
-  verify_phases.py (98 checks) ── ntfy alerts ── status.py ── React UI @ :8765
+  verify_phases.py (111 checks) ── ntfy alerts ── status.py ── React UI @ :8765
 ```
 
 ### Part 1 — the Idea Engine (built, verified)
@@ -106,41 +110,113 @@
   (`docs/DR_RUNBOOK.md`), 60-day log rotation, `requirements-lock.txt` (186 pins),
   announcement taxonomy tagger (16,963 classified).
 
-### Verification — 29 → 98 pin-to-pin checks
+### Part 4 — shareholding-pattern warehouse, survivorship-free (Stages 1–3 built; backfill in flight)
+> *Data-acquisition only by explicit design. The 5 pre-registered SHP signals stay
+> `pending_depth` until a separately-triggered, human-approved test. Building the
+> extractor is not evidence of predictive value (house rule #1).*
+
+- **Stage 1 — extraction**: BSE's undocumented JSON API (endpoint family extracted from the
+  site's own Angular bundle, all live-verified; docs in
+  [docs/shp_extraction_routes.md](docs/shp_extraction_routes.md)). `shp_filing` is
+  PIT-anchored on the **exchange broadcast timestamp** — a revised filing's PIT is its
+  revision time; revisions are new rows chained by `is_revision_of`; a partial unique index
+  enforces one current version per scrip-quarter. Raw XBRL on disk, never DB blobs. Two
+  routes from the research brief were honestly found **dead** (announcements category,
+  bsesme.com) — moot, since the main API covers mainboard + SME uniformly.
+- **Stage 2 — full depth + the empirical PIT floor**: filings/quarter cliff-jumps
+  6 → 58 → **2,226 at March 2016**; pre-2016 rows are retro-uploads (a 2006 filing broadcast
+  in 2023, avg lag 2,734d vs 22d after) — gated out by a filing-lag rule, not a blind date
+  cutoff. **Usable window: Mar-2016 → present, ~41 quarters.** Table III adds the FPI/DII
+  split (named-holder nesting flagged via `is_aggregate` — naive summing double-counts;
+  **Sept-2022 format break** means clean DII subtotals exist only post-break, FPI is
+  recoverable across the full window). Coverage audit: `analysis/shp_coverage_audit.py`.
+- **Stage 3 — survivorship-free PIT universe**: Stage 2's audit proved enumeration saw only
+  today's Active list — the delisted names a pledge signal must catch were invisible.
+  `shp_pit_universe` (70,503 scrip-quarters × 42 quarters) rebuilds the denominator from the
+  price spine (membership: ≥10 trading days + last trade within 21d of quarter-end; ISIN
+  resolved as-of, rename-safe), keyed to `bse_scrip_master` (10,751 scrips **including
+  4,612 delisted + 1,226 suspended**). The corrected matrix: missing-delisted =
+  **20.7% of the 2016 universe → ~0% today** — textbook adverse survivorship, and it hid
+  mega-caps too (**HDFC Ltd** was in the hole). Recovery = the same fetcher over the dead
+  lists (official API serves them; DHFL-proven); outcomes in `shp_recovery_log` so re-runs
+  never re-chase dead cells.
+- **In flight (automated)**: full-depth backfill (~143k filings) → delisted recovery →
+  universe re-join → final coverage audit; the monitoring chain runs it end-to-end.
+- **Pre-registered, frozen, untested**: `shp_pledge_delta` (prior: risk-veto at best),
+  `shp_promoter_delta`, `shp_fpi_delta`, `shp_dii_delta`, `shp_composite` — exact pass/kill
+  criteria in `signal_preregistration`; power math (t≥3.0 at N≈41 quarters needs net
+  Sharpe ≈ 0.77) says expect **0–1 survivors**, most likely pledge as a veto.
+
+### Verification — 29 → 98 → 111 pin-to-pin checks
 The suite (`common/verify_phases.py`) re-derives every claim from raw tables nightly:
 adjusted prices, PIT universe/joins, backfill parity, band invariants, portfolio caps,
 scoring reproducibility, membership integrity, pre-registration honesty (scored ⇒ passed
 gate; killed ⇒ zero weight), risk-brake re-derivation, PIT strict-`<`, shadow isolation,
-cap-lift switch-off. **98/98 green.**
+cap-lift switch-off — plus Part 4's S1–S13: SHP PIT sanity, one-current-version,
+revision-chain hash integrity, grand-total ≈100% parse invariant, cross-source promoter-%
+vs NSE, FPI/B2 reconciliation, retro-upload exclusion, survivorship-free denominator,
+no-PIT-poison join, status consistency, recovery re-derivability. **111/111 green.**
 
-### The frontend (2026-07-03)
-React SPA (`web_ui/`): sidebar, 6 pages — Overview (regime+risk hero, log equity curve),
-Idea Cards (confidence rings → **thesis drill-down drawer** with exact pillar waterfall),
-Risk (brake ladder, concentration), Research & Verdicts (the full ledger), Funds, Events.
-Emerald+cyan glass on deep navy, CVD-validated chart palette, framer-motion animation.
-Served with basic auth by the stdlib Python server; legacy HTML kept at `/legacy`.
+### The frontend (2026-07-05)
+React SPA (`web_ui/`): collapsible sidebar (Ctrl+B, persisted), 6 pages — Overview
+(regime+risk hero, log equity curve), Idea Cards (confidence rings → **thesis drill-down
+drawer** with exact pillar waterfall), Risk (brake ladder, concentration), Research &
+Verdicts (the full ledger, searchable), Funds (847-fund table with live search/sort),
+Events. Plus **⌘K command palette** (pages + idea symbols) and a **symbol profile drawer**
+(features + fundamentals + live idea card + recent events, composed from existing
+endpoints). One shared motion system, shape-matched skeleton loaders, real error states.
+Emerald+cyan glass on deep navy; served with basic auth by the stdlib Python server;
+legacy HTML at `/legacy`.
 
 ### How to run everything
 ```powershell
 py -3.14 data_extraction\web\serve_dashboard.py   # UI + API -> http://localhost:8765 (admin/micc)
-py -3.14 data_extraction\common\verify_phases.py  # 98-check audit
+py -3.14 data_extraction\common\verify_phases.py  # 111-check audit
 py -3.14 automation\status.py                     # heartbeats, streak x/10, timeout headroom
 py -3.14 data_extraction\run_pipeline.py          # manual daily (scheduler does this at 18:30)
 py -3.14 automation\backup_db.py --drill          # restore drill (monthly habit)
 cd web_ui; npm run build                          # rebuild UI after frontend changes
+
+# Part 4 (SHP) — normally driven by the weekly pipeline + monitoring chain:
+py -3.14 data_extraction\events\fetch_shp.py --quarters 8 --budget-min 80   # weekly sweep
+py -3.14 data_extraction\events\recover_shp_delisted.py --budget-min 300    # dead-name recovery
+py -3.14 data_extraction\registry\build_shp_pit_universe.py                 # re-join universe
+py -3.14 data_extraction\analysis\shp_coverage_audit.py                     # honest coverage report
 ```
 
-### What honestly remains (all time-gated, none build-gated)
-1. **10-green-runs acceptance gate** — streak 0/10; the scheduler proves itself over ~2 weeks.
-2. **Event-thesis promotion** — ~mid-2027 (shadow sample accrues daily).
-3. **True PEAD** — needs ≥12 PIT quarters (~2028); proxy stays context.
-4. **Learning-loop weight proposals** — need ≥30 closed scored trades/pillar (months away).
-5. **Live capital** — 12–18 months of paper record + hit-rate/Sharpe/DD thresholds +
+### What honestly remains
+1. **Part 4 in flight (automated)** — full-depth backfill → delisted recovery → final
+   audit (~days of wall clock, zero build work); then the **signal-test trigger is a
+   human decision**, explicitly not automated.
+2. **10-green-runs acceptance gate** — streak 1/10; the scheduler proves itself over ~2 weeks.
+3. **Event-thesis promotion** — ~mid-2027 (shadow sample accrues daily).
+4. **True PEAD** — needs ≥12 PIT quarters (~2028); proxy stays context.
+5. **Learning-loop weight proposals** — need ≥30 closed scored trades/pillar (months away).
+6. **Live capital** — 12–18 months of paper record + hit-rate/Sharpe/DD thresholds +
    Kite static IP. Explicitly not a 2026 decision.
+7. **DR gap (⚠️ real)** — both backup copies now live on D: (house rule: no MICC data off
+   D:). A dead D: drive loses DB + backups together; code survives on GitHub. Fix = an
+   off-drive `MICC_BACKUP_SECONDARY` target (external drive) whenever one exists.
 
 ---
 
 ## Progress log
+
+### 2026-07-05 · 01:35 IST — Ops sweep: everything committed to GitHub, Jul-2 post-mortem closed, status.py de-noised
+
+- **Committed + pushed** two days of uncommitted work in 3 logical commits (`57d2805`
+  Part 4 Stages 1–3 · `e2297ed` frontend polish + structural · `2114c01` ops/backup/docs)
+  — the DR model's "code survives on GitHub" assumption is true again.
+- **Jul-2 daily failure post-mortem (closed, no action)**: `parquet` timed out at its old
+  600s cap + Health Check at 60s — both already raised by the Jul-3 hardening commit.
+  Root cause was fixed before it was diagnosed; now it's also documented.
+- **Timeout caps**: 6 of 8 `[TIGHT]` flags were phantoms — `status.py` was reading caps
+  from old `monitoring_log` rows predating the Jul-3 raises. The 2 real ones fixed:
+  `fundamentals` 7200→18000s, `annual_fin` 7200→21600s (it had actually HIT its cap).
+- **status.py fixed properly**: headroom check now takes the cap from the *latest* logged
+  run (kills the phantom-flag class), and freshness is cadence-aware — monthly tables
+  (`current_signals`, `idea_card`) no longer read as stale; all four freshness rows OK.
+- State sections of this README brought current (Parts 1–4, 111 checks, new frontend).
 
 ### 2026-07-05 · 01:10 IST — Part 4 Stage 3: survivorship-free PIT universe for SHP — the hole measured, recovery proven
 
