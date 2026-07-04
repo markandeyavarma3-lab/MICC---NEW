@@ -7,7 +7,7 @@
 |---|---|---|
 | Live DB (19 GB) | `D:\marketDB\db\market.db` | continuous |
 | Primary backups (VACUUM INTO, integrity-checked) | `D:\marketDB\backups\market_YYYYMMDD.db` | weekly, keep 2 weekly + 2 monthly |
-| Secondary copy (different drive) | `C:\MICC_backups\` (newest only) | weekly |
+| Secondary copy (⚠️ same drive as of 2026-07-04, was `C:\MICC_backups\`) | `D:\marketDB\backups_secondary\` (newest only) | weekly |
 | Parquet lake (prices, rebuildable source) | `data_storage/parquet/` + `D:\marketDB\stocks\all` | daily |
 | Code + configs | GitHub `markandeyavarma3-lab/MICC---NEW` | every change |
 | Dependency lock | `requirements-lock.txt` (py -3.14) | on change |
@@ -23,9 +23,20 @@
    (daily_update backfills missed dates). Re-enable tasks.
 
 ## Scenario 2 — D: drive dead
+⚠️ **Broken as of 2026-07-04.** Both the primary backups (`D:\marketDB\backups\`) and
+the secondary copy (`D:\marketDB\backups_secondary\`) were moved onto D: itself (house
+rule: all MICC data lives under `D:\MICC` / `D:\marketDB` only, nothing on C:). A dead
+D: drive now takes **every** backup with it — the secondary no longer protects against
+this scenario, only against accidental deletion / bad pruning of the primary. **This
+gap needs a real fix**: point `MICC_BACKUP_SECONDARY` at a genuinely separate physical
+location (external/USB drive, NAS, or cloud object storage) as soon as one is available,
+then re-run `automation\backup_db.py` once to seed it.
+
+Until that's fixed, D: drive death falls through to Scenario 3 (rebuild from GitHub +
+re-fetch). Steps below assume a restored/replaced backup location exists again:
 1. New disk. Restore code: `git clone https://github.com/markandeyavarma3-lab/MICC---NEW D:\MICC`.
 2. Restore env: install Python 3.14, `py -3.14 -m pip install -r requirements-lock.txt`.
-3. Restore DB from the secondary copy: `C:\MICC_backups\market_*.db` → `D:\marketDB\db\market.db`.
+3. Restore DB from whatever off-drive backup exists → `D:\marketDB\db\market.db`.
    (Loses at most 7 days of data — the daily pipeline re-fetches recent days on next run;
    older gap days: `market/daily_update.py` checks the last ~6 trading dates only, so for a
    longer outage re-run bhavcopy backfill for the missing range.)

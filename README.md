@@ -101,9 +101,10 @@
   the champion). Re-runs quarterly. Champion = the frozen linear composite, again.
 - **Event shadow log**: 2,023 would-be event ideas accruing 21/63/126td outcomes;
   promotion gate: ≥12 months + ≥30 filled + beats 49% baseline (~mid-2027).
-- **Ops**: weekly `VACUUM INTO` backups (18.7GB, integrity-checked) + **secondary copy on C:**,
-  restore drill **PASS**, DR runbook (`docs/DR_RUNBOOK.md`), 60-day log rotation,
-  `requirements-lock.txt` (186 pins), announcement taxonomy tagger (16,963 classified).
+- **Ops**: weekly `VACUUM INTO` backups (18.7GB, integrity-checked) + secondary copy
+  (⚠️ same-drive as of 2026-07-04 — see below), restore drill **PASS**, DR runbook
+  (`docs/DR_RUNBOOK.md`), 60-day log rotation, `requirements-lock.txt` (186 pins),
+  announcement taxonomy tagger (16,963 classified).
 
 ### Verification — 29 → 98 pin-to-pin checks
 The suite (`common/verify_phases.py`) re-derives every claim from raw tables nightly:
@@ -140,6 +141,200 @@ cd web_ui; npm run build                          # rebuild UI after frontend ch
 ---
 
 ## Progress log
+
+### 2026-07-05 · 01:10 IST — Part 4 Stage 3: survivorship-free PIT universe for SHP — the hole measured, recovery proven
+
+**Why**: Stage 2's verdict — SHP enumeration saw only today's Active list, so delisted
+names (the blowups pledge is supposed to catch) were invisible. A pledge test on that
+universe is structurally tilted toward "pledge didn't hurt".
+
+**The decisive probe first**: BSE's own API serves the dead. `ListofScripData` exposes
+**Delisted (4,612) + Suspended (1,226)** lists with ISINs, and `SHPQNewFormat` serves a
+delisted scrip's full filing history — verified on DHFL (19 PIT-timestamped filings up
+to its Jun-2021 delisting, Table I parses, grand total 100.0). So recovery = extending
+Stage-1 enumeration to the dead lists through the same idempotent, PIT-lag-gated
+machinery. Official endpoints only; no archive scraping needed.
+
+**Built**:
+- `registry/fetch_bse_scrip_master.py` → `bse_scrip_master` (10,751 scrips incl. dead —
+  the ISIN→scrip map that no longer forgets).
+- `registry/build_shp_pit_universe.py` → `shp_pit_universe`: quarterly survivorship-free
+  spine from the price warehouse (membership: ≥10 trading days in quarter + last trade
+  within 21d of quarter-end; funds/ETFs excluded; ISIN resolved as-of via `isin_master`,
+  rename-safe), joined to SHP with per-cell status
+  (`present` / `missing_active` / `missing_delisted` + reason). 70,503 scrip-quarters,
+  42 quarters, idempotent rebuild.
+- `events/recover_shp_delisted.py`: bounded, resumable, official-API recovery; outcomes
+  in `shp_recovery_log` so re-runs never re-chase known-dead cells. **Smoke-proven**:
+  first 2 dead scrips → 43 PIT-usable filings recovered+parsed (one of them **HDFC Ltd**
+  — the survivorship hole hides merger-delisted mega-caps, not just blowups), universe
+  cells flipped to `present` on rebuild.
+- Verify suite **107 → 111** (S10 denominator-is-survivorship-free, S11 no PIT-poison in
+  the join, S12 status integrity, S13 recovery-log re-derivability). All green.
+- Weekly pipeline: + `bse_scrips` + `shp_universe` phases.
+
+**The corrected coverage matrix (the whole point)**: on the survivorship-free
+denominator, fill is **72.9%** overall — and the missing-delisted share is **20.7% of
+the 2016 universe, decaying to ~0% today** (textbook adverse survivorship: the early
+window is missing exactly its dead names). 1,302 missing-delisted cells sit inside the
+top-500 liquidity tiers. Recovery targets: 341 dead scrips with clean BSE mappings
+covering 3,283 cells; 914 cells have no BSE scrip (NSE-only names — NSE route is their
+fallback), 867 have no ISIN mapping (pre-2016 `isin_master` gaps). Full recovery queued
+to run right after the Stage-2 backfill finishes (one fetcher per host). The 5 SHP
+signals stay `pending_depth` — no tests run.
+
+### 2026-07-05 · 00:35 IST — Frontend structural upgrade: collapsible sidebar, table search/sort, command palette, symbol profile drawer
+
+Direct follow-on to the polish pass, now explicitly opened up to structural/interaction
+changes (not just visual).
+
+- **Collapsible sidebar**: default width trimmed 240px→208px; click the chevron (or
+  `Ctrl/Cmd+B`) to fully collapse to a widgets-only full-width view, with a small edge
+  tab to bring it back. State persists via `localStorage`.
+- **Table search + sort**, opt-in on the shared `Table` component (fully backward
+  compatible — existing call sites untouched unless they pass the new props): live
+  text search + click-column-to-sort. Wired onto Funds (847-fund scorecard — the
+  table that most needed it), Events "Recent events", and the Research verdict ledger
+  / IC gate results.
+- **Command palette** (`Ctrl/Cmd+K`, also click "Search…" in the sidebar): jump to any
+  page or search idea-card symbols by name/company, arrow keys + Enter, no new backend
+  calls (reuses the existing `/api/ideas` cache).
+- **Symbol profile drawer**: click any symbol (currently wired on Events' Recent-events
+  table; palette symbol search opens it too) → one unified view combining
+  `/api/asset/{symbol}` (sector, momentum/vol features, fundamentals) with a live
+  idea-card summary if one exists and recent events for that symbol — composed
+  entirely client-side from **endpoints that already existed**, no backend changes.
+
+**Three real bugs caught by testing in a browser, not just reading the diff** (same
+discipline as the polish pass): (1) `deliv_1m` is stored as an already-scaled
+percentage (58.6) while the other features are fractions (0.18) — the shared `%`
+formatter multiplied it again, rendering "5861.8%" instead of "58.6%"; found by
+actually reading the rendered drawer, not assuming the formatter was right. (2)
+`prox_52w_high` was mislabeled "distance" when a value of 100% means *at* the high,
+not away from it — relabeled to "proximity" to match its actual meaning. (3) Verified
+the collapse mechanics (click, keyboard shortcut, persistence-after-reload) each with
+a real interaction + screenshot, not just visual inspection of the default state.
+
+Verified with the same Playwright harness as before: dev mode + the real production
+build behind basic auth, zero console errors across every page and every new
+interaction (search, sort, palette open/search/navigate/symbol-select, drawer
+open/close via click/Esc/backdrop).
+
+### 2026-07-04 · 23:50 IST — Frontend visual/motion polish pass (Vercel/Stripe-caliber refinement, same identity/nav/pages)
+
+Scoped per explicit direction: refine the existing emerald+cyan glass-dark identity
+(not a redesign), tasteful/subtle animation only, no structural/nav/layout changes,
+calibrated to a Vercel/Stripe feel. All 6 pages + shared components touched.
+
+**Design system fixes**: found and unified **4 near-duplicate "eyebrow label" styles**
+scattered across files (10px/11px, 0.14em/0.16em/0.2em tracking all doing the same
+job) into one `.label` utility. Refined `.glass` with layered depth (inset highlight +
+tight + ambient shadow, was one flat shadow) and a shared easing token
+(`--ease-out-expo`). Consolidated **animation timings that were previously ad hoc per
+component** (0.22s/0.3s/0.8s/0.9s scattered) into `src/lib/motion.js` — one tuned
+physics system (`stagger`, `pageTransition`, `springPill`, `springDrawer`) used
+everywhere instead of one-off values.
+
+**New states that didn't exist before**: shape-matched **skeleton loaders**
+(`StatSkeleton`/`CardGridSkeleton`/`TableSkeleton`/`ChartSkeleton`) replacing a single
+generic spinner used identically regardless of what was loading; a real **error state**
+(`ErrorState` + retry) — previously a failed fetch just spun the loading indicator
+forever, silently, with no way to recover without a page reload.
+
+**Two real bugs caught and fixed by actually testing in a browser, not just reading the
+diff**: (1) a botched `Glass`/`motion.div` prop pass-through in Ideas.jsx that would
+have silently no-op'd the card press feedback (invalid props on a plain div); (2) a
+**sticky table header that looked right in a static screenshot but was structurally
+broken** — the table's own `overflow-x-auto` wrapper becomes the nearest CSS scroll
+anchor (browser overflow-x/y coupling rule) rather than the actual scrolling `<main>`,
+so the header would vanish instead of pinning. Reverted rather than ship non-functional
+CSS. Caught by an actual scroll-and-screenshot test, not visual inspection.
+
+**Verification**: full Playwright pass (`npx playwright`, no project run-skill existed
+for this yet) — all 6 pages + the thesis drill-down drawer, dev mode AND the real
+production build behind basic auth, **zero console errors** throughout. Screenshots
+inspected, not just "it loaded."
+
+### 2026-07-04 · 17:30 IST — SHP alpha pre-registration frozen + FPI/DII layer built + Stage 2 (full-depth) started
+
+**Pre-registration (frozen before any test — house rule #1).** A deep evidence-review
+brief on "do quarterly SHP changes predict Indian equity returns?" produced 5 candidate
+signals, all registered `pending_depth` in `signal_preregistration` with exact
+test/window/pass/kill criteria and honest prior verdicts *before touching data*:
+`shp_pledge_delta` (prior: survives only as a risk-veto, not a return pillar —
+crash-risk literature), `shp_promoter_delta` (borderline → likely context tag),
+`shp_fpi_delta` / `shp_dii_delta` (likely fail — priced contemporaneously / herding
+modest-to-negative), `shp_composite` (likely fails). **No test has been run**; these
+stay `pending_depth` until a separate, explicitly-triggered task.
+
+**FPI/DII data layer (the study needs it, Stage 1 didn't have it).** Table I only had
+promoter/public totals — no foreign-vs-domestic institutional split. Added
+`shp_institutional_summary` (Table III) + parser in `fetch_shp.py`; BSE cleanly
+separates `Foreign Portfolio Investors Cat I/II` from `Institutions (Domestic)`. Parser
+self-validates (FPI Cat I+II = Institutions-Foreign subtotal to rounding). New verify
+check **S8** (106 total). Pledge% for the veto signal already works from Table I.
+
+**Second fetcher bug caught + fixed.** A targeted `--scrips` test silently ignored its
+scope filter in Phase B and grabbed the whole 29k-filing backlog (duplicate BSE load);
+killed within 2 min, fixed the scoping so targeted runs stay targeted.
+
+**Part 4 Stage 2 — full-depth backfill + PIT floor.** Empirical floor confirmed from the
+data, not assumed: filings-per-quarter cliff-jumps 6 → 58 → **2,226** at qtrid 89
+(**March 2016**); pre-2016 filings that carry a timestamp are **retro-uploads** (avg
+broadcast lag 2,734 days vs 22 days post-2016 — a 2006 filing broadcast in 2023),
+PIT-honest but useless for a quarter-aligned test. So the usable, real-time-filed PIT
+window is **Mar 2016 → Mar 2026 = 41 quarters** (was "8 quarters, unpowered"). Full-depth
+pass covers Table I + Table III across this window, enforced by a filing-lag
+trustworthiness gate (not a blind date cutoff). Coverage audit
+(`analysis/shp_coverage_audit.py`) is the actual Stage 2 deliverable — survivorship,
+per-segment fill, Table III fill, revision prevalence — before any signal test runs.
+
+### 2026-07-04 · 12:15 IST — All MICC data moved off C:; secondary backup now same-drive (⚠️ DR gap)
+
+House rule enforced: **no MICC data anywhere on C:**, only under `D:\MICC` /
+`D:\marketDB`. Found and fixed the one violation: the weekly secondary backup copy
+(`C:\MICC_backups\market_*.db`, 18.7 GB) — verified byte-identical (sha256 match) to
+the primary backup already on `D:\marketDB\backups\`, then deleted (nothing lost) and
+repointed `automation/backup_db.py`'s `SECONDARY_DIR` at `D:\marketDB\backups_secondary\`.
+Freed ~18GB on a C: drive that was at 92% full (20GB free → 37GB).
+**Honest tradeoff, flagged in `docs/DR_RUNBOOK.md`**: the secondary copy's whole reason
+for existing was surviving a **D: drive failure**; now that it's on D: too, that
+protection is gone (Scenario 2 in the DR runbook is marked broken) — it now only
+guards against accidental deletion/bad pruning of the primary backups dir. Needs a
+real off-drive location (external drive/NAS/cloud) to close the gap; `MICC_BACKUP_SECONDARY`
+env var makes that a one-line fix whenever one exists.
+
+### 2026-07-04 · 11:00 IST — Part 4 Stage 1: BSE shareholding-pattern acquisition (data-only; no scoring)
+
+**Step-0 route verification first, honest verdicts** ([docs/shp_extraction_routes.md](docs/shp_extraction_routes.md)):
+the research report's "announcements category" route is **dead** (BSE announcements has no
+SHP category) and `bsesme.com` SHP page is **dead** (error stub) — but both are moot: the
+undocumented `api.bseindia.com` JSON layer serves a full SHP endpoint family for
+**mainboard + SME in one place** (endpoint names extracted from the site's Angular bundle,
+all live-verified). Depth per scrip: quarters back to **2001**; exchange
+`filing_date_time` (the PIT anchor) populated from **March 2016**. NSE bulk date-range
+route also live (cross-check + what's-new detector).
+
+**Built (additive only, nothing touches scoring/idea_card per house rule #1):**
+- `events/shp_schema.py` → `shp_filing` / `shp_category_summary` / `shp_named_holder`
+  (Stage 1b). PIT rule enforced in schema + code: `pit_date` = broadcast of **the version
+  stored** (a revised filing's PIT is its revision time, not the original filing time).
+  Revisions are new rows chained via `is_revision_of`; a partial unique index guarantees
+  one current version per scrip-quarter. Raw XBRL on disk (`data_storage/raw/shp/`), not blobs.
+- `events/fetch_shp.py` — idempotent sweeper: enumerate (also the weekly new/revision
+  detector) → raw XBRL + sha256 → Table I parse. Budget-boxed (`--budget-min`), throttled,
+  ntfy summary (`--notify`). Caught in smoke test: BSE lists refiled quarters as TWO
+  'New' rows — versions are processed in broadcast-time order so the latest wins.
+- Weekly phase wired into `run_pipeline.py --weekly` (`--quarters 8 --budget-min 80`).
+- **Verify suite 98 → 105**: PIT sanity, one-current-version, revision-chain + hash-change,
+  grand-total ≈100% parse invariant, mainboard/SME coverage, **cross-source promoter-%
+  vs the NSE fetcher (8/8 within 1pp)**, revised-after-original. All green.
+
+**Stage 1 backfill launched** (detached): full 4,913-scrip universe (497 SME), last 8
+quarters parsed, full 2016→ filing index. Runs ~8–10h; weekly job keeps it current after.
+Stages 2–4 (pre-2016 backfill with estimated-PIT policy, delisted names, named holders)
+deferred — same gate pattern as Parts 1–3. **No scoring integration** until a
+pre-registered walk-forward test earns it.
 
 ### 2026-07-03 · 23:00 IST — New React frontend (glassy dark, 6 pages) replaces the single-page HTML
 

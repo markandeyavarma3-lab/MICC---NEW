@@ -20,9 +20,13 @@ from pathlib import Path
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
 BACKUP_DIR = Path(r"D:\marketDB\backups")
-# second location on a DIFFERENT drive: D: dying must not take the backups with it.
-# C: has ~42GB free -> exactly ONE secondary copy is kept (newest).
-SECONDARY_DIR = Path(os.environ.get("MICC_BACKUP_SECONDARY", r"C:\MICC_backups"))
+# 2026-07-04: moved off C: (house rule -- all MICC data lives under D:\MICC or
+# D:\marketDB only). This is now a SAME-DRIVE secondary copy: it protects against
+# accidental deletion / bad pruning of the primary backups dir, but NOT against a
+# D: drive failure -- that DR guarantee is gone until this points at a genuinely
+# separate physical location (external drive / NAS / cloud). Exactly ONE
+# secondary copy is kept (newest).
+SECONDARY_DIR = Path(os.environ.get("MICC_BACKUP_SECONDARY", r"D:\marketDB\backups_secondary"))
 KEEP_WEEKLY = 2
 KEEP_MONTHLY = 2
 KEY_TABLES = ["stock_data", "stock_data_adj", "recommendations", "thesis",
