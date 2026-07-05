@@ -51,7 +51,15 @@ os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
 
 DB_PATH  = Path(r"D:\marketDB\db\market.db")
 RAW_DIR  = Path(r"D:\MICC\data_storage\raw\shp")
-LOG_FILE = Path(r"D:\MICC\data_extraction\logs\fetch_shp.log")
+
+# shard-aware log file: two --shard workers writing to one file would interleave
+# lines mid-record and break every log-tailing/monitoring script that greps for
+# "parse N/M" progress counters. Scanned from sys.argv directly since this runs
+# at import time, before argparse.
+_shard_arg = next((a.split("=", 1)[1] if "=" in a else sys.argv[i + 1]
+                   for i, a in enumerate(sys.argv) if a.startswith("--shard")), "")
+_shard_suffix = f"_shard{_shard_arg.replace('/', 'of')}" if _shard_arg else ""
+LOG_FILE = Path(rf"D:\MICC\data_extraction\logs\fetch_shp{_shard_suffix}.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 
 logging.basicConfig(
@@ -428,6 +436,12 @@ def main():
     ap.add_argument("--skip-enum", action="store_true",
                     help="jump straight to Phase B (parse), skipping the ~90-min "
                          "re-enumeration -- for cheap resumes of an interrupted deep backfill")
+    ap.add_argument("--shard", default="",
+                    help="'N/M' -- only process filings where scrip_code %% M == N. "
+                         "Run M instances with N=0..M-1 to split Phase B work across "
+                         "processes (each gets its own session/cookies; DB writes are "
+                         "safe via busy_timeout). No overlap between shards by "
+                         "construction -- a shard never touches another shard's rows.")
     ap.add_argument("--notify", action="store_true")
     a = ap.parse_args()
 
@@ -487,20 +501,28 @@ def main():
                 codes = [u["scrip"] for u in uni]
                 scrip_clause = f" AND f.scrip_code IN ({','.join('?' * len(codes))})"
                 params += codes
+            # --shard N/M: partition Phase B across M cooperating processes by
+            # scrip_code modulo M. Disjoint by construction -- no filing can match
+            # two shards, so parallel workers never race on the same row.
+            shard_clause = ""
+            if a.shard:
+                shard_n, shard_m = (int(x) for x in a.shard.split("/"))
+                shard_clause = " AND CAST(f.scrip_code AS INTEGER) % ? = ?"
+                params += [shard_m, shard_n]
             todo = conn.execute(
                 f"""SELECT f.filing_id, f.scrip_code, f.qtrid, f.source_url, f.file_hash,
                            f.raw_blob_path, f.parse_status,
                            EXISTS(SELECT 1 FROM shp_institutional_summary s
                                   WHERE s.filing_id=f.filing_id) AS has_inst
                     FROM shp_filing f
-                    WHERE f.is_current_version=1 AND f.qtrid>=?{lag_clause}{scrip_clause}
+                    WHERE f.is_current_version=1 AND f.qtrid>=?{lag_clause}{scrip_clause}{shard_clause}
                       AND (f.parse_status IN ('unparsed','parse_failed')
                            OR NOT EXISTS(SELECT 1 FROM shp_institutional_summary s
                                          WHERE s.filing_id=f.filing_id))
                     ORDER BY f.qtrid DESC, f.scrip_code""", params).fetchall()
             log.info(f"Phase B: {len(todo)} filings to fetch+parse "
                      f"(qtrid {qmin:g}..{qcut:g}, full_depth={a.full_depth}, "
-                     f"max_lag={a.max_filing_lag_days}d)")
+                     f"max_lag={a.max_filing_lag_days}d, shard={a.shard or 'none'})")
             for i, f in enumerate(todo, 1):
                 if out_of_time():
                     log.warning(f"budget reached during parse at {i}/{len(todo)} — resumes next run")
