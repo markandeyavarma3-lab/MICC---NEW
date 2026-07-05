@@ -591,10 +591,13 @@ def main():
     log.info(f"Daily Market Update — checking {dates}")
     log.info("="*55)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=120)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=30000")
+    # 120s: 30s lost a lock race with the weekly pipeline's long write
+    # transactions on 2026-07-03 ("database is locked" in update_fii_dii
+    # during the daily/weekly overlap). 120s is the repo-wide convention.
+    conn.execute("PRAGMA busy_timeout=120000")
     create_core_tables(conn)
 
     log.info("── [1/7] Stocks ──────────────────────────────────────")

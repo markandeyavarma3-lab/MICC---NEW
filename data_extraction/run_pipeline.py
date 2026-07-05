@@ -165,8 +165,13 @@ DAILY_PHASES = [
 WEEKLY_PHASES = [
     ("stock_registry", "registry/refresh_stock_registry.py",   "Stock registry refresh",                ["--headless"], 600),
     ("universe",       "registry/build_tradable_universe.py",  "Tradable universe",                     None, 300),
-    ("fundamentals",   "events/update_fundamentals.py",        "Fundamentals TTM",                      None, 18000),
+    # corp_actions BEFORE fundamentals: both hit yfinance, and the 96-min
+    # fundamentals pass exhausts Yahoo's quota — on 2026-07-03 corp_actions ran
+    # right after it, got throttled-empty responses for ~every symbol, and
+    # "succeeded" in 202s storing nothing (stale table, green phase). Cheap
+    # phases drink first; the marathon runs after.
     ("corp_actions",   "events/update_corporate_actions.py",   "Corporate Actions",                     None, 1800),
+    ("fundamentals",   "events/update_fundamentals.py",        "Fundamentals TTM",                      None, 18000),
     ("amfi_flows",     "funds/backfill_amfi_industry.py",      "AMFI MF industry monthly flows",        None, 600),
     ("index_members",  "registry/fetch_index_constituents.py", "Index constituents + sector",           None, 300),
     ("nifty50_hist",   "registry/fetch_niftyindices_nifty50.py","NIFTY 50 survivorship-free history (niftyindices)", None, 120),
