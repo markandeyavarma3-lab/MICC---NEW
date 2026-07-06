@@ -264,6 +264,20 @@ found unprompted):
   commits meant **zero data lost** either time, just wall-clock. Third occurrence — worth
   checking lid-close/sleep settings directly rather than continuing to patch around it.
 
+**11:58 IST addendum — decision on the overnight-sleep-kill pattern.** Three options were
+weighed for the recurring silent-death-on-sleep issue above:
+1. *Habit, zero engineering*: glance at `py -3.14 automation/status.py` before shutting
+   down — if the last heartbeat is recent and a phase shows running, hold off.
+2. *Shutdown guard*: a script that checks a "jobs in flight" marker (PID file / `running=1`
+   row) and warns on shutdown mid-job — a real fix, but an automation-layer build.
+3. *Structural*: stop running multi-hour manual jobs at night on a machine about to sleep.
+
+Since every kill so far has cost pure wall-clock and zero data (per-record commits,
+confirmed twice), this is a minor-nuisance problem, not a data-integrity one — not worth
+over-investing in. **Decision: option 1 adopted now** — a `status.py` glance before
+shutdown, nothing built. Option 2 stays on the shelf, only worth building if the
+nuisance keeps recurring enough to justify it.
+
 ### 2026-07-05 · 01:35 IST — Ops sweep: everything committed to GitHub, Jul-2 post-mortem closed, status.py de-noised
 
 - **Committed + pushed** two days of uncommitted work in 3 logical commits (`57d2805`
