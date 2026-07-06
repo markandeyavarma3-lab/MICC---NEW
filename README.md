@@ -202,6 +202,68 @@ py -3.14 data_extraction\analysis\shp_coverage_audit.py                     # ho
 
 ## Progress log
 
+### 2026-07-06 · 11:50 IST — Ops incident response: insider feed silently dead ~2 months, fixed; task-scheduler/yfinance root causes found and closed
+
+A health check (`verify_phases.py` 111/111 — core scoring logic clean) surfaced four
+automation anomalies. Diagnosed each independently rather than assuming a shared cause;
+two turned out to be genuinely unrelated.
+
+- **`insider_cluster_buy` feed dead since ~late April, invisibly.** NSE retired
+  `/api/corporates-pit` — but the dead endpoint kept answering `HTTP 200` with a
+  syntactically valid *empty* envelope (`{"data":[]}`), so the fetcher never errored and
+  the daily heartbeat stayed green while the **one live-scored, live-weighted signal**
+  (t=3.67) quietly starved for two months. Root-caused independently (did not assume the
+  Part-4 Table-III-style break): NSE moved to `/api/corporates-pit-gg`, a filing *index*
+  whose transaction detail (name/category/qty/value) now lives in **per-filing XBRL** on
+  `nsearchives.nseindia.com`. Rewrote `insider_trading_fetch.py`: index + XBRL parse,
+  per-filing commits (a kill mid-run loses nothing — proven twice by the overnight
+  incidents below), a circuit breaker on nsearchives throttle bursts, a self-healing
+  window (was yesterday-only, so any single failed day was lost forever with no trace —
+  now `max(filing_date)-3d`, capped at 45d), a **7-day staleness tripwire** that exits
+  non-zero on purpose so a future break is a loud FAIL not another silent gap, and
+  ingest-side vocab normalization (new XBRL categories → the legacy strings the frozen,
+  already-validated scoring layer filters on — zero changes to scoring itself). Backfilled
+  and verified current to **2026-07-04** (2.3 days stale, inside tolerance); event layer
+  rebuilt, `insider_cluster_buy` events now extend to match (was stuck at Jun-09).
+- **Weekly heartbeat missing entirely for 07-03; daily FAILed 07-02.** Two different root
+  causes, confirmed from the actual Task Scheduler / pipeline logs, not inferred: (1) the
+  4-hour `ExecutionTimeLimit` (same cap on both tasks) killed the weekly mid-`annual_fin`
+  at the 7,200s wall — the OS-level kill happens before `heartbeat.py` can run, so "no
+  heartbeat row" is the expected shape of that failure, not a mystery; (2) 07-02's
+  `database is locked` was the Friday weekly's writes overlapping the daily's, which
+  reliably finishes ~19:00:20–45 right as the 19:00 weekly starts. Fixed: daily limit
+  4h→6h, weekly 4h→**14h**, weekly trigger 19:00→**19:30**, `daily_update.py` busy_timeout
+  30s→120s. **Needs one admin-elevated run of `register_tasks.ps1` from the user** to
+  actually apply — flagged, not silently assumed done.
+- **`corporate_actions` stale since 06-29 — a third, unrelated cause.** The 96-minute
+  `fundamentals` yfinance pull ran immediately before `corp_actions` in the weekly phase
+  order, exhausting Yahoo's quota so `corp_actions` "succeeded" in ~200s while silently
+  storing nothing. Reordered: cheap phases drink from yfinance first, the marathon last.
+- **`annual_fin` confirmed genuinely killed at its cap** (not just slow) — the weekly log
+  shows the literal timeout kill. Cap already raised to 21,600s in the same session as the
+  Part 4 Stage-3 commit (`57d2805`); healed with a full rerun.
+
+**Two self-corrections worth recording, not burying** (both caught by the user, not
+found unprompted):
+1. Claimed "cap already raised to 21,600s" as if that explained `status.py`'s displayed
+   `7200s/7200s` reading — it doesn't. `status.py`'s headroom check reads the cap from
+   the last **`run_pipeline.py`-orchestrated** run logged in `monitoring_log`; that row
+   is from *before* the raise, and `run_pipeline.py` has no single-phase mode, so a
+   direct script rerun (what was actually done) never refreshes it. The code fix is
+   real; the status *display* stays stale until a genuine pipeline-orchestrated run
+   occurs (next Friday, or a full multi-hour manual `--weekly`). Conflating "fixed the
+   code" with "confirmed the display" was the error.
+2. Reported a "verification run after all fixes" using `check_db_health.py` while the
+   insider circuit-breaker resume pass (~930 filings) hadn't finished yet — a mid-flight
+   snapshot presented as a final one. Corrected: no more triads (`verify_phases.py` +
+   `status.py` + `check_db_health.py`) until every queued job has actually finished.
+- **Two more overnight silent-death incidents** (18:28 and again ~21:51→11:29, ~13.5h
+  gap) hit the SHP shards, the dashboard server, and a mid-flight `annual_fin` run — same
+  signature as the earlier one (all unrelated processes die together, zero error trace):
+  consistent with the laptop sleeping, not an application bug. Per-filing/per-record
+  commits meant **zero data lost** either time, just wall-clock. Third occurrence — worth
+  checking lid-close/sleep settings directly rather than continuing to patch around it.
+
 ### 2026-07-05 · 01:35 IST — Ops sweep: everything committed to GitHub, Jul-2 post-mortem closed, status.py de-noised
 
 - **Committed + pushed** two days of uncommitted work in 3 logical commits (`57d2805`
