@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 HORIZONS = (21, 63, 126)
 SHADOW_TYPES = ("insider_cluster_buy", "pead_proxy", "buyback_announce", "index_inclusion")
 START = "2024-01-01"          # shadow window start (recent regime, forward-looking log)

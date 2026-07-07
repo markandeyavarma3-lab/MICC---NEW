@@ -12,7 +12,7 @@ from datetime import date, timedelta, datetime
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 API = ("https://www.nseindia.com/api/corporates-corporateActions"
        "?index=equities&from_date={f}&to_date={t}")
 

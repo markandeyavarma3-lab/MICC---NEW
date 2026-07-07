@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 HORIZON_TD = 21           # 1-month duration (trading days)
 N_RECS = 15               # top-N conviction picks per date
 TARGET_SIG = 1.5          # target band = entry * (1 + 1.5*sigma_horizon)

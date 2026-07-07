@@ -28,7 +28,7 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 NOW     = datetime.now().isoformat()
 TODAY   = datetime.now().strftime("%Y-%m-%d")
 

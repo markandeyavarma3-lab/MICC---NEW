@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 RF = 0.06
 YEAR = np.timedelta64(365, "D")
 

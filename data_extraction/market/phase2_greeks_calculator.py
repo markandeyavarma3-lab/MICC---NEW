@@ -13,7 +13,7 @@ from scipy.stats import norm
 import pandas as pd
 import numpy as np
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\greeks_gex.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 MIN_MEMBERS = 5
 RS_WIN, MOM_WIN, BETA_WIN = 63, 21, 252
 

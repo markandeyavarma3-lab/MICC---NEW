@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 MIN_VALUE = 2_500_000        # INR 25L per insider buy to count toward a cluster
 CLUSTER_WINDOW_D = 28        # calendar days (~20 trading days)

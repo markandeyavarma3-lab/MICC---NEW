@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 SIGNALS = ["mom_12_1", "prox_52w_high", "deliv_1m"]
 N_DECILES = 10
 GATE_THRESHOLD = 50.0     # invest only when %>200DMA >= 50

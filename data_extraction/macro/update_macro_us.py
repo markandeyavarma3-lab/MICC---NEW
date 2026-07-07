@@ -19,7 +19,7 @@ from fredapi import Fred
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # ---------- CONFIGURATION ----------
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\macro_us.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

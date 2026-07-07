@@ -6,7 +6,7 @@ Run:  py -3.14 D:\\MICC\\automation\\status.py
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 
 def main():

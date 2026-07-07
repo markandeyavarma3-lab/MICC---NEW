@@ -7,6 +7,7 @@
 
 # The data lives locally only — never push it (multi-GB)
 data_storage/
+marketDB/
 
 # Per-script logs and run state
 data_extraction/logs/

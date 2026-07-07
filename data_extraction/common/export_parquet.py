@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """export_parquet.py — Export stock_data (SQLite) to per-symbol yearly parquet.
 
-Writes D:/marketDB/stocks/all/<SYMBOL>/<YEAR>.parquet so the parquet-based
+Writes D:/MICC/marketDB/stocks/all/<SYMBOL>/<YEAR>.parquet so the parquet-based
 consumers work (update_corporate_actions, update_fundamentals, phase9b stocks
 mode, marketdb.get_stock). Idempotent: merges with existing files, dedup by date.
 
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH      = Path(r"D:\marketDB\db\market.db")
-PARQUET_ROOT = Path(r"D:\marketDB\stocks\all")
+DB_PATH      = Path(r"D:\MICC\marketDB\db\market.db")
+PARQUET_ROOT = Path(r"D:\MICC\marketDB\stocks\all")
 
 COLS = ["date", "open", "high", "low", "close", "volume"]
 

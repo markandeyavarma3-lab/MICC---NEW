@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # Known NSE holidays (same as daily_update)
 NSE_HOLIDAYS = {

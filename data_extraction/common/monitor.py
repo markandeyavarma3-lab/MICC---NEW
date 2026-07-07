@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 STALE_DAYS = 6        # flag a daily table older than this many calendar days
 
 

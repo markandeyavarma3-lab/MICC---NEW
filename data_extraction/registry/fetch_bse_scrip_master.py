@@ -23,7 +23,7 @@ import os
 import requests
 
 os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 API = "https://api.bseindia.com/BseIndiaAPI/api"
 HDRS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

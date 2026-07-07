@@ -11,7 +11,7 @@ from datetime import datetime
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 # 331 = "Live IPO GMP" report; FY path gives that financial year's IPOs
 URLS = [
     "https://webnodejs.investorgain.com/cloud/report/data-read/331/1/5/{y}/{fy}/0/all?search=&v=09-25",

@@ -36,7 +36,7 @@ from fetch_shp import (Client, enumerate_scrip, process_filing,   # noqa: E402
                        keep_system_awake, log)
 from shp_schema import ensure_schema                              # noqa: E402
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_DDL = """CREATE TABLE IF NOT EXISTS shp_recovery_log (
     scrip_code    TEXT PRIMARY KEY,
     listing_status TEXT,   -- Delisted | Suspended (at attempt time)

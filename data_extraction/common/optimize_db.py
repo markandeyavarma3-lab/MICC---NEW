@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\optimize_db.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

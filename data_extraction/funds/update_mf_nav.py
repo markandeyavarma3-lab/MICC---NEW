@@ -10,7 +10,7 @@ from datetime import datetime
 import os, certifi
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\mf_nav.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

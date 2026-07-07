@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 SIGNALS = ["mom_12_1", "prox_52w_high", "deliv_1m"]
 COST_PER_SIDE = 0.0030          # 30 bps default
 N_DECILES = 10

@@ -36,7 +36,7 @@ else:
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 logging.getLogger("WDM").setLevel(logging.WARNING)
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 FO_DIR = Path("data/fo_bhavcopy")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\daily_update.log")
 TODAY = datetime.today()

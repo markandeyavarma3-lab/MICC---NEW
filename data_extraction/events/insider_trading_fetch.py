@@ -19,7 +19,7 @@ import nsefin  # kept for import-compat; insider fetch now uses the NSE API dire
 import os, certifi
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\insider_trading.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

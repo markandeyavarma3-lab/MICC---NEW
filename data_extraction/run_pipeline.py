@@ -51,7 +51,7 @@ def log_runtime(name, ok, elapsed, timeout):
     self-reporting (status.py flags phases creeping past 1/3 of their cap)."""
     try:
         import sqlite3
-        c = sqlite3.connect(r"D:\marketDB\db\market.db", timeout=30)
+        c = sqlite3.connect(r"D:\MICC\marketDB\db\market.db", timeout=30)
         c.execute("INSERT INTO monitoring_log VALUES (?,?,?,?)",
                   (datetime.now().isoformat(), f"phase_runtime:{name}",
                    "OK" if ok else "FAIL", f"{elapsed:.0f}s / cap {timeout}s"))
@@ -191,7 +191,10 @@ WEEKLY_PHASES = [
     ("weekly_review",  "ideas/weekly_review.py",               "Friday learning loop (monitor-only)",   None, 600),
     ("exit_recal",     "common/calibrate_exits.py",            "Quarterly exit re-calibration (auto-gated)", ["--auto"], 900),
     ("ml_gate",        "common/ml_cpcv_harness.py",            "Quarterly ML/CPCV challenger re-run (auto-gated)", ["--auto"], 1800),
-    ("db_backup",      "../automation/backup_db.py",           "VACUUM INTO backup + integrity check",  None, 2700),
+    # db_backup DISABLED 2026-07-07 (user request: no on-disk backups, single MICC
+    # folder). External copies are handled manually off-machine. Re-enable by
+    # uncommenting if an on-disk snapshot is ever wanted again.
+    # ("db_backup",    "../automation/backup_db.py",           "VACUUM INTO backup + integrity check",  None, 2700),
     ("alphavantage",   "events/fetch_alphavantage.py",         "AlphaVantage US earnings/holdings/insider", None, 300),
     # --- research/strategy layer rebuild (order matters: isin -> adj -> universe -> features -> backtests) ---
     ("isin",        "registry/build_isin_master.py",      "ISIN master + renames",                  None, 600),

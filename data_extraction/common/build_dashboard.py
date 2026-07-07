@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 OUT = Path(r"D:\MICC\MICC_dashboard.html")
 PERIODS_YR = 12
 

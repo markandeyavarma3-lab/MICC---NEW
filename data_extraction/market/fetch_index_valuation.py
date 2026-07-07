@@ -11,7 +11,7 @@ from datetime import datetime
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 PEPB_URL = "https://www.niftyindices.com/Backpage.aspx/getpepbHistoricaldataDBtoString"
 
 INDICES = [

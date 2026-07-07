@@ -12,7 +12,7 @@ from datetime import date
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 INDICES = {
     "nifty50": "NIFTY 50", "niftynext50": "NIFTY NEXT 50", "nifty100": "NIFTY 100",
     "nifty200": "NIFTY 200", "nifty500": "NIFTY 500", "niftymidcap100": "NIFTY MIDCAP 100",

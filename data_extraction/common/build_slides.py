@@ -8,7 +8,7 @@ Run:  py -3.14 common/build_slides.py
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 OUT = Path(r"D:\MICC\MICC_slides.html")
 
 

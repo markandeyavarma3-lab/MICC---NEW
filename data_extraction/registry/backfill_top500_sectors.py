@@ -14,7 +14,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # ETFs that reach the top-500 by turnover but carry no equity sector.
 KNOWN_ETFS = {"TATSILV", "TATAGOLD", "HDFCGOLD", "HDFCSML250", "GOLD1", "MODEFENCE"}

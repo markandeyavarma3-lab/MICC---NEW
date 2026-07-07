@@ -46,8 +46,8 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DB_PATH       = Path("D:/marketDB/db/market.db")
-FO_DIR        = Path("D:/marketDB/NSE_FO")
+DB_PATH       = Path("D:/MICC/marketDB/db/market.db")
+FO_DIR        = Path("D:/MICC/marketDB/NSE_FO")
 BACKFILL_FROM = date(2024, 7, 8)
 
 NSE_FO_URL = (
@@ -532,7 +532,7 @@ if __name__ == "__main__":
     parser.add_argument("--today",    action="store_true")
     parser.add_argument("--from",    dest="from_date", default=None)
     parser.add_argument("--force",   action="store_true", help="Re-download existing dates")
-    parser.add_argument("--local",   action="store_true", help="Load from D:/marketDB/NSE_FO/*.zip")
+    parser.add_argument("--local",   action="store_true", help="Load from D:/MICC/marketDB/NSE_FO/*.zip")
     args = parser.parse_args()
 
     if args.probe:

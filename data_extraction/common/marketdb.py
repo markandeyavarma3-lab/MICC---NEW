@@ -1,5 +1,5 @@
 # marketdb.py - MICC Data Pipeline Query API
-# Clean access layer for D:/marketDB (SQLite + Parquet)
+# Clean access layer for D:/MICC/marketDB (SQLite + Parquet)
 # Works from any script in D:/MICC/ or D:/MICC/data_extraction/
 #
 # Quick usage:
@@ -18,8 +18,8 @@ from datetime import datetime
 
 import pandas as pd
 
-DB_PATH    = Path(r"D:\\marketDB\\db\\market.db")
-STOCKS_DIR = Path(r"D:\\marketDB\\stocks\\all")
+DB_PATH    = Path(r"D:\\MICC\\marketDB\\db\\market.db")
+STOCKS_DIR = Path(r"D:\\MICC\\marketDB\\stocks\\all")
 
 
 class MarketDB:

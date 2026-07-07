@@ -47,8 +47,8 @@ except ImportError:
 import numpy as np
 import pandas as pd
 
-DB_PATH      = Path(r"D:\marketDB\db\market.db")
-PARQUET_ROOT = Path(r"D:\marketDB\stocks\all")
+DB_PATH      = Path(r"D:\MICC\marketDB\db\market.db")
+PARQUET_ROOT = Path(r"D:\MICC\marketDB\stocks\all")
 
 REGIME_WINDOWS = [5, 10, 20, 30, 60, 90, 180, 252]
 TODAY_STR      = datetime.today().strftime("%Y-%m-%d")
@@ -546,7 +546,7 @@ def main():
                 except Exception:
                     print(f"  {t[0]:<40}  (error)")
             log("Run this manually to diagnose:", "WARN")
-            log("  py -c \"import sqlite3; c=sqlite3.connect(r'D:/marketDB/db/market.db'); [print(r) for r in c.execute(\\\"SELECT name FROM sqlite_master WHERE type='table'\\\").fetchall()]\"")
+            log("  py -c \"import sqlite3; c=sqlite3.connect(r'D:/MICC/marketDB/db/market.db'); [print(r) for r in c.execute(\\\"SELECT name FROM sqlite_master WHERE type='table'\\\").fetchall()]\"")
             sys.exit(1)
 
         # ── Step 2: NSE index regime stats ───────────────────────────────────

@@ -24,7 +24,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # System holding horizons in TRADING days (build_bands/calibrate_exits): a swing
 # idea is worked over ~21 td, a positional over ~63 td, after which an untouched

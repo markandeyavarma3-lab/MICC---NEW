@@ -2,7 +2,7 @@
 ### What it has · what it does · how · what it produces · how it delivers · how it verifies
 
 *A single-operator Indian-equity quantitative research & paper-trading platform.*
-*SQLite warehouse at `D:\marketDB\db\market.db` · run everything with `py -3.14` from `data_extraction/`.*
+*SQLite warehouse at `D:\MICC\marketDB\db\market.db` · run everything with `py -3.14` from `data_extraction/`.*
 
 ---
 

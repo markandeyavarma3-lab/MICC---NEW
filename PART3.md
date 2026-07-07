@@ -1,7 +1,7 @@
 # MICC — Part 3: Learning Loop, Risk Engine, Calibration, Fundamentals & ML Harness (As-Built)
 
 **Status:** ✅ Core modules built · `verify_phases.py` **98/98 green** (79 after Part 2 review)
-**Date:** 2026-07 · **DB:** `D:\marketDB\db\market.db` · **Interpreter:** `py -3.14`
+**Date:** 2026-07 · **DB:** `D:\MICC\marketDB\db\market.db` · **Interpreter:** `py -3.14`
 
 Part 3's premise, stated bluntly (and enforced in code): **at ~10–30 closed trades a
 month the desk does not have the statistical power to update six pillar weights on a

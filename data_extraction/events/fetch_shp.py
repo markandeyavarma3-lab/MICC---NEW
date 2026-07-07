@@ -53,7 +53,7 @@ from shp_schema import ensure_schema  # noqa: E402
 
 os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
 
-DB_PATH  = Path(r"D:\marketDB\db\market.db")
+DB_PATH  = Path(r"D:\MICC\marketDB\db\market.db")
 RAW_DIR  = Path(r"D:\MICC\data_storage\raw\shp")
 
 # shard-aware log file: two --shard workers writing to one file would interleave

@@ -18,8 +18,8 @@ os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
-STOCKS_DIR = Path(r"D:\marketDB\stocks\all")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
+STOCKS_DIR = Path(r"D:\MICC\marketDB\stocks\all")
 LOG_FILE = Path(r"D:\MICC\data_extraction\logs\\corporate_actions.log")
 LOG_FILE.parent.mkdir(exist_ok=True)
 

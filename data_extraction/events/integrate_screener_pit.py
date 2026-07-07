@@ -31,7 +31,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 FILING_LAG_DAYS = 60
 VALIDATE_TOL = 0.25
 # screener P&L fields worth keeping as metrics (raw names as parsed)

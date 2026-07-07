@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 REFRESH_DAYS = 30
 SLEEP_S = 3.0
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"

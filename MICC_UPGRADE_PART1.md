@@ -12,7 +12,7 @@
 ## 0. Reality check — what the architecture doc got wrong
 
 The source doc was written **without repo access** and assumed the foundation was
-missing. Verified against `D:\marketDB\db\market.db` (91 tables) and the repo, most
+missing. Verified against `D:\MICC\marketDB\db\market.db` (91 tables) and the repo, most
 of it already exists. This plan targets only the genuine gaps.
 
 | Doc claim ("gap") | Actual state | Verdict |
@@ -68,7 +68,7 @@ Corrected constants (repo-verified): **555** recommendations, **59%** sector cov
   regression-tested in `verify_phases.py`.
 - **Auditable.** Every score is reproducible from a versioned weights row + persisted
   per-pillar contributions. No opaque numbers.
-- **Run interpreter:** `py -3.14` (has nselib/fredapi/duckdb). DB: `D:\marketDB\db\market.db`.
+- **Run interpreter:** `py -3.14` (has nselib/fredapi/duckdb). DB: `D:\MICC\marketDB\db\market.db`.
 
 ---
 

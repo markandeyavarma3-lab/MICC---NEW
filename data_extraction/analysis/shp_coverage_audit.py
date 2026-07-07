@@ -23,7 +23,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LAG_FLOOR_DAYS = 400   # same trustworthiness gate the fetcher uses
 
 OUT = []

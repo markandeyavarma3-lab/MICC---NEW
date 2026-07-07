@@ -34,7 +34,7 @@ ETF_RE = re.compile(
     r"(BEES|ETF|LIQUID|SILVER|CPSE|BHARATBOND|GSEC|GOLDBEES|GOLDCASE|GOLDIETF|"
     r"GOLDSHARE|MAFANG|HNGSNG|NIFTYBEES|EBBETF|SDLBOND|MON100|MOM100|NETF)", re.I)
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 WINDOW_TD = 63          # trailing trading days (~3 months)
 MIN_DAYS = 30           # must trade at least this many of the window
 LIQUID_FLOOR = 1e7      # Rs 1 crore median daily turnover

@@ -1,7 +1,7 @@
 # MICC — Part 2: Signal & Engine Depth (As-Built Reference)
 
 **Status:** ✅ Complete · `verify_phases.py` **72/72 green** (was 54 after Part 1)
-**Date:** 2026-07 · **DB:** `D:\marketDB\db\market.db` · **Interpreter:** `py -3.14`
+**Date:** 2026-07 · **DB:** `D:\MICC\marketDB\db\market.db` · **Interpreter:** `py -3.14`
 
 As-built record of Part 2 — what exists and, more importantly, **what earned scoring
 weight vs what got demoted to context under the pre-registered discipline rule**:

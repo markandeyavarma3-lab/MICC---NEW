@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 NIFTY50_CSV = (Path(__file__).resolve().parents[1].parent / "data_storage" / "raw"
                / "niftyindices" / "weights.csv")
 

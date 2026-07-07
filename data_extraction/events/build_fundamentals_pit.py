@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LAG = {"quarterly": 45, "annual": 60}
 TABLES = [("quarterly_income", "quarterly"), ("quarterly_balance", "quarterly"),
           ("quarterly_cashflow", "quarterly"), ("annual_income", "annual"),

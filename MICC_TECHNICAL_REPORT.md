@@ -2,7 +2,7 @@
 
 > Exact mechanics, formulas, algorithms, and numbers. Reproducible-from-this-document.
 > State as of 2026-06-30: **88 tables · 146,682,989 rows · 19.19 GB** SQLite at
-> `D:\marketDB\db\market.db`. Interpreter: `py -3.14` (has nselib/fredapi/lightgbm).
+> `D:\MICC\marketDB\db\market.db`. Interpreter: `py -3.14` (has nselib/fredapi/lightgbm).
 
 ---
 

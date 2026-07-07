@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH      = Path(r"D:\marketDB\db\market.db")
+DB_PATH      = Path(r"D:\MICC\marketDB\db\market.db")
 ARCHIVE      = Path(r"D:\MICC\data_storage\raw\bhavcopy")
 LEGACY_DIR   = ARCHIVE / "legacy"
 SECFULL_DIR  = ARCHIVE / "secfull"

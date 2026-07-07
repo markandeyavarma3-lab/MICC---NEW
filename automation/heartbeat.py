@@ -16,7 +16,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 
 def tail(path, n=25):

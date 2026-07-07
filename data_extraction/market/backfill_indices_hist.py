@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # name -> (yahoo_ticker, history_start)
 NSE_INDEX_MASTER = {

@@ -35,7 +35,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 FIRST_QUARTER = "2016-03-31"        # empirical PIT floor (Stage 2)
 MIN_TRADING_DAYS = 10
 LAST_TRADE_WINDOW_DAYS = 21

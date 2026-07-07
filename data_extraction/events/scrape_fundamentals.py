@@ -18,7 +18,7 @@ Fields collected:
 import sqlite3, time, sys, re, json
 from datetime import datetime
 
-DB = r"D:\marketDB\db\market.db"
+DB = r"D:\MICC\marketDB\db\market.db"
 
 try:
     import requests

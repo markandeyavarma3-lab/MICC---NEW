@@ -16,7 +16,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # risk limits
 MAX_WEIGHT = 0.06          # max single-name target weight

@@ -14,7 +14,7 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 NOW     = datetime.now().isoformat()
 
 # ── Auto-install pytrends using THIS Python (not pip) ─────────────────────────

@@ -5,27 +5,27 @@
 ## What exists, where
 | Asset | Location | Cadence |
 |---|---|---|
-| Live DB (19 GB) | `D:\marketDB\db\market.db` | continuous |
-| Primary backups (VACUUM INTO, integrity-checked) | `D:\marketDB\backups\market_YYYYMMDD.db` | weekly, keep 2 weekly + 2 monthly |
-| Secondary copy (⚠️ same drive as of 2026-07-04, was `C:\MICC_backups\`) | `D:\marketDB\backups_secondary\` (newest only) | weekly |
-| Parquet lake (prices, rebuildable source) | `data_storage/parquet/` + `D:\marketDB\stocks\all` | daily |
+| Live DB (19 GB) | `D:\MICC\marketDB\db\market.db` | continuous |
+| Primary backups (VACUUM INTO, integrity-checked) | `D:\MICC\marketDB\backups\market_YYYYMMDD.db` | weekly, keep 2 weekly + 2 monthly |
+| Secondary copy (⚠️ same drive as of 2026-07-04, was `C:\MICC_backups\`) | `D:\MICC\marketDB\backups_secondary\` (newest only) | weekly |
+| Parquet lake (prices, rebuildable source) | `data_storage/parquet/` + `D:\MICC\marketDB\stocks\all` | daily |
 | Code + configs | GitHub `markandeyavarma3-lab/MICC---NEW` | every change |
 | Dependency lock | `requirements-lock.txt` (py -3.14) | on change |
 
 ## Scenario 1 — DB corrupted, D: alive
 1. Stop scheduled tasks: `schtasks /end /tn MICC-Daily` (and Weekly); disable temporarily.
 2. `PRAGMA integrity_check` on the live DB to confirm corruption.
-3. Rename the corrupt DB aside; copy the newest `D:\marketDB\backups\market_*.db`
-   to `D:\marketDB\db\market.db`.
+3. Rename the corrupt DB aside; copy the newest `D:\MICC\marketDB\backups\market_*.db`
+   to `D:\MICC\marketDB\db\market.db`.
 4. `py -3.14 automation\backup_db.py --drill` mindset: run
    `py -3.14 data_extraction\common\verify_phases.py` — all green = restored.
 5. Re-run `py -3.14 data_extraction\run_pipeline.py` to catch up the gap days
    (daily_update backfills missed dates). Re-enable tasks.
 
 ## Scenario 2 — D: drive dead
-⚠️ **Broken as of 2026-07-04.** Both the primary backups (`D:\marketDB\backups\`) and
-the secondary copy (`D:\marketDB\backups_secondary\`) were moved onto D: itself (house
-rule: all MICC data lives under `D:\MICC` / `D:\marketDB` only, nothing on C:). A dead
+⚠️ **Broken as of 2026-07-04.** Both the primary backups (`D:\MICC\marketDB\backups\`) and
+the secondary copy (`D:\MICC\marketDB\backups_secondary\`) were moved onto D: itself (house
+rule: all MICC data lives under `D:\MICC` / `D:\MICC\marketDB` only, nothing on C:). A dead
 D: drive now takes **every** backup with it — the secondary no longer protects against
 this scenario, only against accidental deletion / bad pruning of the primary. **This
 gap needs a real fix**: point `MICC_BACKUP_SECONDARY` at a genuinely separate physical
@@ -36,7 +36,7 @@ Until that's fixed, D: drive death falls through to Scenario 3 (rebuild from Git
 re-fetch). Steps below assume a restored/replaced backup location exists again:
 1. New disk. Restore code: `git clone https://github.com/markandeyavarma3-lab/MICC---NEW D:\MICC`.
 2. Restore env: install Python 3.14, `py -3.14 -m pip install -r requirements-lock.txt`.
-3. Restore DB from whatever off-drive backup exists → `D:\marketDB\db\market.db`.
+3. Restore DB from whatever off-drive backup exists → `D:\MICC\marketDB\db\market.db`.
    (Loses at most 7 days of data — the daily pipeline re-fetches recent days on next run;
    older gap days: `market/daily_update.py` checks the last ~6 trading dates only, so for a
    longer outage re-run bhavcopy backfill for the missing range.)

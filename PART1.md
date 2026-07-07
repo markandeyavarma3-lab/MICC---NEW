@@ -2,7 +2,7 @@
 
 **Status:** ✅ Complete · `verify_phases.py` **54/54 green** · branch `feat/part1-idea-engine`
 (includes post-review hardening + owner sizing spec — see §9)
-**Date:** 2026-07 · **DB:** `D:\marketDB\db\market.db` (system-of-record) · **Interpreter:** `py -3.14`
+**Date:** 2026-07 · **DB:** `D:\MICC\marketDB\db\market.db` (system-of-record) · **Interpreter:** `py -3.14`
 
 This is the **as-built** reference for Part 1 — what exists in the code and database
 *right now*, not a plan. For the staged execution plan and design rationale see

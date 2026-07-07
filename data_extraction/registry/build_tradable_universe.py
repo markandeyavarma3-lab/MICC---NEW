@@ -7,7 +7,7 @@ import requests
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
 URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-DB = r"D:\marketDB\db\market.db"
+DB = r"D:\MICC\marketDB\db\market.db"
 
 headers = {"User-Agent": "Mozilla/5.0"}
 resp = requests.get(URL, headers=headers, timeout=15)

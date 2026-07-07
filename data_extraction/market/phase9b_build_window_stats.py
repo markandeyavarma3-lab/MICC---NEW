@@ -103,8 +103,8 @@ import pandas as pd
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DB_PATH      = Path(r"D:\marketDB\db\market.db")
-PARQUET_ROOT = Path(r"D:\marketDB\stocks\all")
+DB_PATH      = Path(r"D:\MICC\marketDB\db\market.db")
+PARQUET_ROOT = Path(r"D:\MICC\marketDB\stocks\all")
 
 WINDOWS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 45, 60, 90, 120, 180, 252, 504, 756]
 REGIME_WINDOWS = [5, 10, 20, 30, 60, 90, 180, 252]

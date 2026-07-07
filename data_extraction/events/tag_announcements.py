@@ -13,7 +13,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # tag -> regex over the announcement subject (checked in order; first hit wins)
 TAXONOMY = [

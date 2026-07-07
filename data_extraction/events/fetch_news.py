@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 FEEDS = {
     "ET-markets":  "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "ET-stocks":   "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",

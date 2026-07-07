@@ -18,7 +18,7 @@ import pandas as pd
 def days_between(d1, d2):
     return abs((datetime.strptime(d1, "%Y-%m-%d") - datetime.strptime(d2, "%Y-%m-%d")).days)
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 R = []   # results: (passed, name, detail)
 
 

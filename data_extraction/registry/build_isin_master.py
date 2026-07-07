@@ -26,7 +26,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 LEGACY_DIR = Path(r"D:\MICC\data_storage\raw\bhavcopy\legacy")
 EQUITY_L_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 MONTHS = {m: i for i, m in enumerate(

@@ -13,7 +13,7 @@ from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 NSE_EQUITY_URL = "https://www.nseindia.com/api/equity-stock?csv=true"
 FALLBACK_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
 

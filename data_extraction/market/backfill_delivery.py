@@ -17,7 +17,7 @@ from datetime import datetime
 
 import pandas as pd
 
-DB_PATH     = Path(r"D:\marketDB\db\market.db")
+DB_PATH     = Path(r"D:\MICC\marketDB\db\market.db")
 ARCHIVE     = Path(r"D:\MICC\data_storage\raw\bhavcopy")
 MTO_DIR     = ARCHIVE / "mto"
 SECFULL_DIR = ARCHIVE / "secfull"

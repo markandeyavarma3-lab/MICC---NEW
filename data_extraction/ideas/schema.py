@@ -17,7 +17,7 @@ Run:  py -3.14 ideas/schema.py     # creates/verifies all tables
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 DDL = [
     """CREATE TABLE IF NOT EXISTS thesis (

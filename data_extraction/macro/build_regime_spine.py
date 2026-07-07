@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 AXIS_VERSION = "v1.0"
 
 # axis weights (priors; validation decides if the spine ships at all)

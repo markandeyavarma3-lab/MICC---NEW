@@ -44,7 +44,7 @@ except ImportError:
 import pandas as pd
 import yfinance as yf
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 # ── Global ticker universe ────────────────────────────────────────────────────
 # Format: "MICC_SYMBOL": ("yfinance_ticker", "display_name", "category")

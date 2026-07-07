@@ -13,7 +13,7 @@ from datetime import datetime, date
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 BASE = ("https://www.nseindia.com/api/historicalOR/bulk-block-short-deals"
         "?optionType={ot}&from={f}&to={t}&csv=true")
 

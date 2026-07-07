@@ -8,7 +8,7 @@ Run:  py -3.14 market/compute_options_analytics.py
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 
 def main():

@@ -24,7 +24,7 @@ from datetime import datetime
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 RAW_DIR = Path(__file__).resolve().parents[1].parent / "data_storage" / "raw" / "alphavantage"
 API_KEY = os.environ.get("ALPHAVANTAGE_KEY", "")
 BASE = "https://www.alphavantage.co/query"

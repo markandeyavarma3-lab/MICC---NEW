@@ -35,7 +35,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH   = Path(r"D:\marketDB\db\market.db")
+DB_PATH   = Path(r"D:\MICC\marketDB\db\market.db")
 FRED_KEY  = os.getenv("FRED_API_KEY", "")   # set FRED_API_KEY in your environment
 
 NOW   = datetime.now().isoformat()

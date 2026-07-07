@@ -444,10 +444,10 @@ per-segment fill, Table III fill, revision prevalence — before any signal test
 ### 2026-07-04 · 12:15 IST — All MICC data moved off C:; secondary backup now same-drive (⚠️ DR gap)
 
 House rule enforced: **no MICC data anywhere on C:**, only under `D:\MICC` /
-`D:\marketDB`. Found and fixed the one violation: the weekly secondary backup copy
+`D:\MICC\marketDB`. Found and fixed the one violation: the weekly secondary backup copy
 (`C:\MICC_backups\market_*.db`, 18.7 GB) — verified byte-identical (sha256 match) to
-the primary backup already on `D:\marketDB\backups\`, then deleted (nothing lost) and
-repointed `automation/backup_db.py`'s `SECONDARY_DIR` at `D:\marketDB\backups_secondary\`.
+the primary backup already on `D:\MICC\marketDB\backups\`, then deleted (nothing lost) and
+repointed `automation/backup_db.py`'s `SECONDARY_DIR` at `D:\MICC\marketDB\backups_secondary\`.
 Freed ~18GB on a C: drive that was at 92% full (20GB free → 37GB).
 **Honest tradeoff, flagged in `docs/DR_RUNBOOK.md`**: the secondary copy's whole reason
 for existing was surviving a **D: drive failure**; now that it's on D: too, that
@@ -584,7 +584,7 @@ MICC/
 ```
 
 > The live SQLite DB + per-symbol parquet that scripts read/write still live at
-> `D:\marketDB\` (hardcoded in the scripts). `data_storage/` holds the raw archival
+> `D:\MICC\marketDB\` (hardcoded in the scripts). `data_storage/` holds the raw archival
 > data. These can be consolidated later if you want a single self-contained tree.
 
 ## Requirements
@@ -618,7 +618,7 @@ py -3.14 data_extraction\market\fetch_nse_data.py --fii
 
 ## Data coverage & deep backfill
 
-The live DB (`D:\marketDB\db\market.db`) has been deep-backfilled from the local
+The live DB (`D:\MICC\marketDB\db\market.db`) has been deep-backfilled from the local
 archive (`data_storage/raw/bhavcopy`, offline, survivorship-free) and online sources.
 
 Every dataset is backfilled to **the earliest its source provides**.
@@ -629,7 +629,7 @@ Every dataset is backfilled to **the earliest its source provides**.
 | `stock_data` (OHLCV) | ~7.65M | 2005 → 2026 | 4,200 symbols (survivorship-free) |
 | `stock_delivery` | ~7.66M | 2005 → 2026 | 4,984 symbols |
 | `market_breadth` | 5,304 | 2005 → 2026 | adv/dec, 52w H/L, % >50/200-DMA |
-| per-symbol parquet | 37,667 files | 2005 → 2026 | `D:\marketDB\stocks\all` |
+| per-symbol parquet | 37,667 files | 2005 → 2026 | `D:\MICC\marketDB\stocks\all` |
 
 **Indices**
 | Table | Rows | Range | Notes |

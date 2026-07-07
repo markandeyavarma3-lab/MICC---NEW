@@ -12,7 +12,7 @@ from datetime import datetime
 
 import requests
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 
 def sess():

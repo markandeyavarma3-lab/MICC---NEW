@@ -31,7 +31,7 @@ from pathlib import Path
 from io import StringIO, BytesIO
 import zipfile
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 NOW     = datetime.now().isoformat()
 TODAY   = datetime.now().strftime("%Y-%m-%d")
 

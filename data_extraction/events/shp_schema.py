@@ -20,7 +20,7 @@ Run:  py -3.14 events/shp_schema.py     (creates tables if missing; idempotent)
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(r"D:\marketDB\db\market.db")
+DB_PATH = Path(r"D:\MICC\marketDB\db\market.db")
 
 SHP_TABLES = [
     """CREATE TABLE IF NOT EXISTS shp_filing (
