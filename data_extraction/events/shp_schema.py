@@ -78,7 +78,32 @@ SHP_TABLES = [
         pct_holding   REAL,
         PRIMARY KEY (filing_id, seq)
     )""",
-    """CREATE TABLE IF NOT EXISTS shp_named_holder (      -- Tables II-IV (Stage 1b fill)
+    """CREATE TABLE IF NOT EXISTS shp_promoter_group (   -- Table II: Promoter & Promoter Group
+        filing_id     TEXT,     -- FK -> shp_filing.filing_id
+        seq           INTEGER,  -- row order in source table
+        category      TEXT,     -- Fld_ShortCatg, e.g. 'Promoter and Promoter Group' (agg/subtotal
+                                 -- rows only; NULL on named rows -- join back via sub_category/level)
+        sub_category  TEXT,     -- Fld_SubCategory: 'Indian' / 'Foreign'
+        level         TEXT,     -- Fld_Level: holder type (e.g. 'Central Government/State
+                                 -- Government(s)') or 'Sub Total A1'/'Sub Total A2' etc
+        holder_name   TEXT,     -- Fld_ShareHolderName. NULL = the category AGGREGATE row;
+                                 -- non-NULL = a named promoter NESTED inside that aggregate
+                                 -- (same shares/pct as its parent -- do not sum both).
+        is_aggregate  INTEGER,  -- 1 if holder_name IS NULL (the usable aggregate), else 0
+        num_holders   INTEGER,
+        num_shares    INTEGER,
+        pct_holding   REAL,
+        pledge_shares INTEGER,  -- Fld_PledgeEncumberedNoOfShares
+        pledge_pct    REAL,     -- Fld_PledgeEncumberedPercentage
+        lockedin_shares   INTEGER,
+        lockedin_pct      REAL,
+        encumbered_shares INTEGER,  -- Fld_TotalencumberedNoOfShares (pledge + other encumbrances)
+        encumbered_pct    REAL,
+        PRIMARY KEY (filing_id, seq)
+    )""",
+    """CREATE TABLE IF NOT EXISTS shp_named_holder (      -- Tables III-IV (Stage 1b fill; III/IV
+                                                            -- named holders already covered inline
+                                                            -- above -- reserved for Table IV detail)
         filing_id     TEXT,     -- FK -> shp_filing.filing_id
         table_no      TEXT,     -- 'II' | 'III' | 'IV'
         seq           INTEGER,
@@ -100,6 +125,7 @@ SHP_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_shp_filing_qtr   ON shp_filing(quarter_end_date)",
     "CREATE INDEX IF NOT EXISTS idx_shp_filing_isin  ON shp_filing(isin)",
     "CREATE INDEX IF NOT EXISTS idx_shp_inst_level   ON shp_institutional_summary(level)",
+    "CREATE INDEX IF NOT EXISTS idx_shp_prom_level   ON shp_promoter_group(level)",
 ]
 
 

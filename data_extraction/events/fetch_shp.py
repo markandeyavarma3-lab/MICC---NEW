@@ -13,8 +13,10 @@ What one run does (all steps idempotent — re-running is a no-op for stored dat
                 timestamp (2016+). Revised filings insert a NEW row
                 (is_revision_of -> old id) and flip the old to non-current.
   2. RAW+PARSE  for current filings in the most recent --quarters N (default 8):
-                download raw XBRL to data_storage/raw/shp/, sha256 it, fetch the
-                Table I summary JSON, store rows in shp_category_summary.
+                download raw XBRL to data_storage/raw/shp/, sha256 it, fetch Table I
+                (summary -> shp_category_summary), Table II (promoter/promoter-group
+                detail incl. pledge -> shp_promoter_group), and Table III (public/
+                institutional FPI-DII split -> shp_institutional_summary).
   3. NOTIFY     (--notify) push a summary to ntfy (MICC_NTFY_TOPIC) — new filings,
                 revisions, parse failures, coverage.
 
@@ -32,10 +34,12 @@ import hashlib
 import json
 import logging
 import os
+import queue
 import random
 import re
 import sqlite3
 import sys
+import threading
 import time
 import urllib.request
 from datetime import datetime
@@ -307,8 +311,56 @@ def parse_pubshold_json(payload):
     return out
 
 
-def process_filing(cli, conn, f, stats):
-    fid, scrip, qtrid, src_url, old_hash, blob_path, parse_status, has_inst = f
+def parse_promoter_json(payload):
+    """Corp_shpPromoterNGroup_ng (Table II) Table1 -> Promoter & Promoter Group rows.
+
+    Same aggregate/named-nested-holder shape as Table III (see parse_pubshold_json):
+    an aggregate row per holder type (holder_name NULL) optionally followed by named
+    promoter rows nested inside it with identical shares/pct -- summing double-counts.
+    Also carries pledge/lock-in/other-encumbrance detail, which Table I only exposes
+    as a single per-category pct_pledged; this is the actual per-holder-type break."""
+    out = []
+    for i, row in enumerate(payload.get("Table1") or []):
+        cat = row.get("Fld_ShortCatg")
+        cat = cat.strip() if isinstance(cat, str) and cat.strip() else None
+        sub = row.get("Fld_SubCategory") or row.get("FLD_SUBCATEGORY")
+        lvl = row.get("Fld_Level") or row.get("FLD_LEVEL")
+        if not (sub or lvl):
+            continue
+        name = row.get("Fld_ShareHolderName")
+        name = name.strip() if isinstance(name, str) and name.strip() else None
+        out.append((
+            i, cat, sub, lvl, name, 1 if name is None else 0,
+            to_int(row.get("Fld_NoOfShareHolders")),
+            to_int(row.get("Fld_TotalNoOfShares")),
+            to_real(row.get("Fld_TotalPercentageOf_A_B_C2")),
+            to_int(row.get("Fld_PledgeEncumberedNoOfShares")),
+            to_real(row.get("Fld_PledgeEncumberedPercentage")),
+            to_int(row.get("Fld_NoOfLockedInShares")),
+            to_real(row.get("Fld_LockedInSharesPercent")),
+            to_int(row.get("Fld_TotalencumberedNoOfShares")),
+            to_real(row.get("Fld_TotalencumberedPercentage")),
+        ))
+    return out
+
+
+def write_with_retry(fn, retries=8, base=2.0):
+    """Retry an idempotent DELETE+INSERT/UPDATE+commit unit on 'database is locked' --
+    busy_timeout alone proved insufficient once two shards + another writer collided.
+    Each attempt re-runs fn() from scratch (safe: every write block here is a clean
+    DELETE-then-INSERT or a plain UPDATE, not an accumulating operation)."""
+    for attempt in range(retries):
+        try:
+            return fn()
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower() and attempt < retries - 1:
+                time.sleep(base * (2 ** attempt) + random.uniform(0, 1))
+                continue
+            raise
+
+
+def process_filing(cli, conn, f, stats, lock):
+    fid, scrip, qtrid, src_url, old_hash, blob_path, parse_status, has_inst, has_prom = f
     scrip_dir = RAW_DIR / scrip
     scrip_dir.mkdir(parents=True, exist_ok=True)
     new_hash, new_path = old_hash, blob_path
@@ -323,10 +375,12 @@ def process_filing(cli, conn, f, stats):
             else:
                 raw = cli.get_bytes(src_url)
                 if raw is None:
-                    stats["raw_fail"] += 1
-                    conn.execute("UPDATE shp_filing SET parse_status='parse_failed' "
-                                 "WHERE filing_id=?", (fid,))
-                    conn.commit()
+                    with lock:
+                        stats["raw_fail"] += 1
+                    write_with_retry(lambda: (
+                        conn.execute("UPDATE shp_filing SET parse_status='parse_failed' "
+                                     "WHERE filing_id=?", (fid,)),
+                        conn.commit()))
                     return
                 fpath.write_bytes(raw)
                 new_hash = hashlib.sha256(raw).hexdigest()
@@ -337,44 +391,75 @@ def process_filing(cli, conn, f, stats):
             f"{API}/Corp_shpSec_SHPSUMMARY_ng/w?scripcode={scrip}&qtrcode={qtrid:g}")
         rows = parse_summary_json(payload) if payload else []
         if not rows:
-            stats["parse_fail"] += 1
-            conn.execute("UPDATE shp_filing SET raw_blob_path=?, file_hash=?, "
-                         "parse_status='parse_failed' WHERE filing_id=?",
-                         (new_path, new_hash, fid))
-            conn.commit()
+            with lock:
+                stats["parse_fail"] += 1
+            write_with_retry(lambda: (
+                conn.execute("UPDATE shp_filing SET raw_blob_path=?, file_hash=?, "
+                             "parse_status='parse_failed' WHERE filing_id=?",
+                             (new_path, new_hash, fid)),
+                conn.commit()))
             return
         (scrip_dir / f"{qtrid:g}_summary.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
-        conn.execute("DELETE FROM shp_category_summary WHERE filing_id=?", (fid,))
-        conn.executemany(
-            "INSERT INTO shp_category_summary VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [(fid,) + r for r in rows])
-        conn.execute("UPDATE shp_filing SET raw_blob_path=?, file_hash=?, "
-                     "parse_status='parsed' WHERE filing_id=?", (new_path, new_hash, fid))
-        conn.commit()
-        stats["parsed"] += 1
+        def _write_table1():
+            conn.execute("DELETE FROM shp_category_summary WHERE filing_id=?", (fid,))
+            conn.executemany(
+                "INSERT INTO shp_category_summary VALUES (?,?,?,?,?,?,?,?,?,?)",
+                [(fid,) + r for r in rows])
+            conn.execute("UPDATE shp_filing SET raw_blob_path=?, file_hash=?, "
+                         "parse_status='parsed' WHERE filing_id=?", (new_path, new_hash, fid))
+            conn.commit()
+        write_with_retry(_write_table1)
+        with lock:
+            stats["parsed"] += 1
 
-    if has_inst:
-        return  # Table III already present -- this call was purely a Table I fetch/retry
+    # Table III (public/institutional FPI-DII split) and Table II (promoter/pledge
+    # detail) are independent supplementary fetches -- a filing can be missing either
+    # one regardless of the other. Failures here do NOT downgrade parse_status (Table I
+    # already satisfied the primary parse contract); tracked separately so coverage is
+    # honestly reported.
+    if not has_inst:
+        pub_payload = cli.get_json(
+            f"{API}/Corp_shpSec_SHPPubShold_ng/w?SCRIPCODE={scrip}&QtrCode={qtrid:g}")
+        inst_rows = parse_pubshold_json(pub_payload) if pub_payload else []
+        if inst_rows:
+            (scrip_dir / f"{qtrid:g}_pubshold.json").write_text(
+                json.dumps(pub_payload, ensure_ascii=False), encoding="utf-8")
 
-    # Table III institutional breakdown (FPI/DII split) -- supplementary: a failure
-    # here does NOT downgrade parse_status (Table I already satisfied the primary
-    # parse contract); tracked separately so coverage is honestly reported.
-    pub_payload = cli.get_json(
-        f"{API}/Corp_shpSec_SHPPubShold_ng/w?SCRIPCODE={scrip}&QtrCode={qtrid:g}")
-    inst_rows = parse_pubshold_json(pub_payload) if pub_payload else []
-    if inst_rows:
-        (scrip_dir / f"{qtrid:g}_pubshold.json").write_text(
-            json.dumps(pub_payload, ensure_ascii=False), encoding="utf-8")
-        conn.execute("DELETE FROM shp_institutional_summary WHERE filing_id=?", (fid,))
-        conn.executemany(
-            "INSERT INTO shp_institutional_summary VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [(fid,) + r for r in inst_rows])
-        conn.commit()
-        stats["inst_parsed"] += 1
-    else:
-        stats["inst_fail"] += 1
+            def _write_table3():
+                conn.execute("DELETE FROM shp_institutional_summary WHERE filing_id=?", (fid,))
+                conn.executemany(
+                    "INSERT INTO shp_institutional_summary VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    [(fid,) + r for r in inst_rows])
+                conn.commit()
+            write_with_retry(_write_table3)
+            with lock:
+                stats["inst_parsed"] += 1
+        else:
+            with lock:
+                stats["inst_fail"] += 1
+
+    if not has_prom:
+        prom_payload = cli.get_json(
+            f"{API}/Corp_shpPromoterNGroup_ng/w?scripcode={scrip}&qtrcode={qtrid:g}")
+        prom_rows = parse_promoter_json(prom_payload) if prom_payload else []
+        if prom_rows:
+            (scrip_dir / f"{qtrid:g}_promoter.json").write_text(
+                json.dumps(prom_payload, ensure_ascii=False), encoding="utf-8")
+
+            def _write_table2():
+                conn.execute("DELETE FROM shp_promoter_group WHERE filing_id=?", (fid,))
+                conn.executemany(
+                    "INSERT INTO shp_promoter_group VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [(fid,) + r for r in prom_rows])
+                conn.commit()
+            write_with_retry(_write_table2)
+            with lock:
+                stats["prom_parsed"] += 1
+        else:
+            with lock:
+                stats["prom_fail"] += 1
 
 
 # ── notify ───────────────────────────────────────────────────────────────────
@@ -388,6 +473,8 @@ def notify(stats, elapsed_min):
             f"raw_fail: {stats['raw_fail']}\n"
             f"institutional (Table III): {stats.get('inst_parsed',0)} ok / "
             f"{stats.get('inst_fail',0)} fail\n"
+            f"promoter group (Table II): {stats.get('prom_parsed',0)} ok / "
+            f"{stats.get('prom_fail',0)} fail\n"
             f"enum ok/fail: {stats['enum_ok']}/{stats['enum_fail']}  "
             f"({elapsed_min:.0f} min, {stats['calls']} calls)")
     try:
@@ -443,6 +530,14 @@ def main():
                          "safe via busy_timeout). No overlap between shards by "
                          "construction -- a shard never touches another shard's rows.")
     ap.add_argument("--notify", action="store_true")
+    ap.add_argument("--workers", type=int, default=4,
+                    help="concurrent fetch threads within Phase B (default 4). Each "
+                         "worker gets its own HTTP session + DB connection; the slow "
+                         "part is waiting on BSE's API, not local CPU/DB work, so this "
+                         "multiplies throughput without changing per-request pacing. "
+                         "DB writes retry through lock contention (write_with_retry) "
+                         "rather than raising -- tune down if 'database is locked' "
+                         "retries show up a lot in the log.")
     a = ap.parse_args()
 
     keep_system_awake()
@@ -455,7 +550,8 @@ def main():
     ensure_schema(conn)
     cli = Client()
     stats = dict(enum_ok=0, enum_fail=0, new_filings=0, revisions=0,
-                 parsed=0, parse_fail=0, raw_fail=0, inst_parsed=0, inst_fail=0, calls=0)
+                 parsed=0, parse_fail=0, raw_fail=0, inst_parsed=0, inst_fail=0,
+                 prom_parsed=0, prom_fail=0, calls=0)
 
     uni = fetch_universe(cli)
     if a.scrips:
@@ -513,25 +609,62 @@ def main():
                 f"""SELECT f.filing_id, f.scrip_code, f.qtrid, f.source_url, f.file_hash,
                            f.raw_blob_path, f.parse_status,
                            EXISTS(SELECT 1 FROM shp_institutional_summary s
-                                  WHERE s.filing_id=f.filing_id) AS has_inst
+                                  WHERE s.filing_id=f.filing_id) AS has_inst,
+                           EXISTS(SELECT 1 FROM shp_promoter_group s
+                                  WHERE s.filing_id=f.filing_id) AS has_prom
                     FROM shp_filing f
                     WHERE f.is_current_version=1 AND f.qtrid>=?{lag_clause}{scrip_clause}{shard_clause}
                       AND (f.parse_status IN ('unparsed','parse_failed')
                            OR NOT EXISTS(SELECT 1 FROM shp_institutional_summary s
+                                         WHERE s.filing_id=f.filing_id)
+                           OR NOT EXISTS(SELECT 1 FROM shp_promoter_group s
                                          WHERE s.filing_id=f.filing_id))
                     ORDER BY f.qtrid DESC, f.scrip_code""", params).fetchall()
             log.info(f"Phase B: {len(todo)} filings to fetch+parse "
                      f"(qtrid {qmin:g}..{qcut:g}, full_depth={a.full_depth}, "
-                     f"max_lag={a.max_filing_lag_days}d, shard={a.shard or 'none'})")
-            for i, f in enumerate(todo, 1):
-                if out_of_time():
-                    log.warning(f"budget reached during parse at {i}/{len(todo)} — resumes next run")
-                    break
-                process_filing(cli, conn, f, stats)
-                if i % 200 == 0:
-                    log.info(f"  parse {i}/{len(todo)}  (ok {stats['parsed']}, "
-                             f"fail {stats['parse_fail']}+{stats['raw_fail']}, "
-                             f"inst {stats['inst_parsed']}/{stats['inst_fail']})")
+                     f"max_lag={a.max_filing_lag_days}d, shard={a.shard or 'none'}, "
+                     f"workers={a.workers})")
+
+            work_q = queue.Queue()
+            for f in todo:
+                work_q.put(f)
+            total = len(todo)
+            progress = {"n": 0}
+            prog_lock = threading.Lock()
+
+            def _worker():
+                w_conn = sqlite3.connect(DB_PATH, timeout=120)
+                w_conn.execute("PRAGMA busy_timeout=120000")
+                w_cli = Client()
+                try:
+                    while not out_of_time():
+                        try:
+                            f = work_q.get_nowait()
+                        except queue.Empty:
+                            return
+                        try:
+                            process_filing(w_cli, w_conn, f, stats, prog_lock)
+                        finally:
+                            work_q.task_done()
+                        with prog_lock:
+                            progress["n"] += 1
+                            n = progress["n"]
+                        if n % 200 == 0:
+                            log.info(f"  parse {n}/{total}  (ok {stats['parsed']}, "
+                                     f"fail {stats['parse_fail']}+{stats['raw_fail']}, "
+                                     f"inst {stats['inst_parsed']}/{stats['inst_fail']}, "
+                                     f"prom {stats['prom_parsed']}/{stats['prom_fail']})")
+                finally:
+                    w_conn.close()
+
+            n_workers = max(1, a.workers)
+            threads = [threading.Thread(target=_worker, daemon=True) for _ in range(n_workers)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            if out_of_time() and progress["n"] < total:
+                log.warning(f"budget reached during parse at {progress['n']}/{total} — resumes next run")
 
     stats["calls"] = cli.calls
     elapsed = (time.time() - t0) / 60
