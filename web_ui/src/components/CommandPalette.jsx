@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { api } from "../lib/api";
 import { useSymbol } from "../lib/symbolContext";
 import { EASE_OUT } from "../lib/motion";
+import { useFocusTrap } from "../lib/a11y";
 
 const PAGES = [
   { to: "/", label: "Overview", icon: "◈" },
   { to: "/ideas", label: "Idea Cards", icon: "▤" },
+  { to: "/portfolio", label: "Portfolio", icon: "◆" },
   { to: "/risk", label: "Risk", icon: "⛨" },
   { to: "/research", label: "Research & Verdicts", icon: "⚖" },
   { to: "/funds", label: "Funds", icon: "◉" },
@@ -20,8 +22,10 @@ export default function CommandPalette() {
   const [sel, setSel] = useState(0);
   const [symbols, setSymbols] = useState([]); // [{symbol, company, confidence_score}]
   const inputRef = useRef(null);
+  const panelRef = useRef(null);
   const navigate = useNavigate();
   const { open: openSymbol } = useSymbol();
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -44,7 +48,7 @@ export default function CommandPalette() {
   useEffect(() => {
     if (open) {
       setQ(""); setSel(0);
-      setTimeout(() => inputRef.current?.focus(), 30);
+      // focus is handled by useFocusTrap (input is the first focusable element)
       api("/api/ideas").then((d) => setSymbols(d?.cards || [])).catch(() => {});
     }
   }, [open]);
@@ -85,21 +89,29 @@ export default function CommandPalette() {
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
+          <m.div
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }} onClick={() => setOpen(false)}
           />
-          <motion.div
+          <m.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
             className="fixed left-1/2 top-[18%] z-50 w-full max-w-[540px] -translate-x-1/2"
             initial={{ opacity: 0, y: -12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={{ duration: 0.22, ease: EASE_OUT }}
           >
             <div className="glass overflow-hidden">
               <div className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3">
-                <span className="text-slate-500">⌘K</span>
+                <span aria-hidden="true" className="text-slate-500">⌘K</span>
                 <input
                   ref={inputRef}
+                  role="combobox"
+                  aria-expanded="true"
+                  aria-controls="palette-listbox"
+                  aria-activedescendant={items[sel] ? `palette-opt-${sel}` : undefined}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={onKeyDown}
@@ -108,7 +120,7 @@ export default function CommandPalette() {
                 />
                 <kbd className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-500">esc</kbd>
               </div>
-              <div className="max-h-[360px] overflow-y-auto p-2">
+              <div id="palette-listbox" role="listbox" className="max-h-[360px] overflow-y-auto p-2">
                 {items.length === 0 && (
                   <div className="px-3 py-6 text-center text-[13px] text-slate-500">no matches</div>
                 )}
@@ -118,7 +130,7 @@ export default function CommandPalette() {
                 {pageResults.map((p) => {
                   const i = items.indexOf(items.find((it) => it.type === "page" && it.to === p.to));
                   return (
-                    <Row key={p.to} active={i === sel} icon={p.icon} label={p.label}
+                    <Row key={p.to} id={`palette-opt-${i}`} active={i === sel} icon={p.icon} label={p.label}
                          onClick={() => activate(items[i])} onMouseEnter={() => setSel(i)} />
                   );
                 })}
@@ -128,29 +140,32 @@ export default function CommandPalette() {
                 {symbolResults.map((s) => {
                   const i = items.indexOf(items.find((it) => it.type === "symbol" && it.symbol === s.symbol));
                   return (
-                    <Row key={s.symbol} active={i === sel} icon="●" label={s.symbol}
+                    <Row key={s.symbol} id={`palette-opt-${i}`} active={i === sel} icon="●" label={s.symbol}
                          sub={s.company} right={`conf ${s.confidence_score.toFixed(0)}`}
                          onClick={() => activate(items[i])} onMouseEnter={() => setSel(i)} />
                   );
                 })}
               </div>
             </div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>
   );
 }
 
-function Row({ active, icon, label, sub, right, onClick, onMouseEnter }) {
+function Row({ id, active, icon, label, sub, right, onClick, onMouseEnter }) {
   return (
     <div
+      id={id}
+      role="option"
+      aria-selected={active}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors
                   ${active ? "bg-cyan-500/10 text-white" : "text-slate-300"}`}
     >
-      <span className="w-4 text-center opacity-70">{icon}</span>
+      <span aria-hidden="true" className="w-4 text-center opacity-70">{icon}</span>
       <span className="flex-1 truncate">{label}{sub && <span className="ml-2 text-[11px] text-slate-500">{sub}</span>}</span>
       {right && <span className="num text-[11px] text-slate-500">{right}</span>}
     </div>

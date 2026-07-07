@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api, C, fmt } from "../lib/api";
 import { Glass, Section, Stat, Pill, useApi, tooltipStyle, StatSkeleton, ChartSkeleton, ErrorState } from "../components/ui";
@@ -53,7 +53,7 @@ export default function Risk() {
                    className={`relative mb-2 flex items-center justify-between rounded-xl border border-transparent px-4 py-3 text-[13px] transition-colors duration-300
                      ${i === ddBand ? "text-slate-100" : "text-slate-400"}`}>
                 {i === ddBand && (
-                  <motion.div layoutId="dd-band" className="absolute inset-0 rounded-xl border border-cyan-500/40 bg-cyan-500/10"
+                  <m.div layoutId="dd-band" className="absolute inset-0 rounded-xl border border-cyan-500/40 bg-cyan-500/10"
                               transition={springPill} />
                 )}
                 {i !== ddBand && <div className="absolute inset-0 rounded-xl border border-white/[0.06]" />}

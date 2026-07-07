@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { springPill, pageTransition, EASE_OUT } from "../lib/motion";
+import { FreshnessBar, Loading } from "./ui";
 import CommandPalette from "./CommandPalette";
 import SymbolDrawer from "./SymbolDrawer";
+import ErrorBoundary from "./ErrorBoundary";
+import { prefetchRoute } from "../lib/routes";
 
 const NAV = [
   { to: "/", label: "Overview", icon: "◈" },
   { to: "/ideas", label: "Idea Cards", icon: "▤" },
+  { to: "/portfolio", label: "Portfolio", icon: "◆" },
   { to: "/risk", label: "Risk", icon: "⛨" },
   { to: "/research", label: "Research & Verdicts", icon: "⚖" },
   { to: "/funds", label: "Funds", icon: "◉" },
@@ -36,7 +40,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-full">
-      <motion.aside
+      <m.aside
         animate={{ width: collapsed ? 0 : 208 }}
         transition={{ duration: 0.28, ease: EASE_OUT }}
         className="flex shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-navy-900/60 backdrop-blur-xl"
@@ -52,6 +56,7 @@ export default function Layout() {
           <button
             onClick={() => setCollapsed(true)}
             title="Collapse sidebar (Ctrl+B)"
+            aria-label="Collapse sidebar"
             className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200"
           >
             <ChevronLeft />
@@ -74,6 +79,7 @@ export default function Layout() {
               key={n.to}
               to={n.to}
               end={n.to === "/"}
+              onMouseEnter={() => prefetchRoute(n.to)}
               className={({ isActive }) =>
                 `group relative block rounded-xl text-[13px] outline-none
                  focus-visible:ring-1 focus-visible:ring-cyan-400/50
@@ -81,14 +87,14 @@ export default function Layout() {
               }
             >
               {({ isActive }) => (
-                <motion.div
+                <m.div
                   className="relative flex items-center gap-3 rounded-xl px-3 py-2.5"
                   whileHover={{ x: isActive ? 0 : 2 }}
                   whileTap={{ scale: 0.98 }}
                   transition={{ duration: 0.15 }}
                 >
                   {isActive ? (
-                    <motion.span
+                    <m.span
                       layoutId="nav-pill"
                       className="absolute inset-0 rounded-xl border border-cyan-500/25 bg-gradient-to-r from-cyan-500/15 to-emerald-500/10"
                       transition={springPill}
@@ -96,9 +102,9 @@ export default function Layout() {
                   ) : (
                     <span className="absolute inset-0 rounded-xl bg-white/[0.03] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                   )}
-                  <span className="relative text-base opacity-80">{n.icon}</span>
+                  <span aria-hidden="true" className="relative text-base opacity-80">{n.icon}</span>
                   <span className="relative whitespace-nowrap">{n.label}</span>
-                </motion.div>
+                </m.div>
               )}
             </NavLink>
           ))}
@@ -107,34 +113,42 @@ export default function Layout() {
           research only · not advice<br />
           survivorship-free · PIT-correct
         </div>
-      </motion.aside>
+      </m.aside>
 
       {/* reveal handle — shown only while the sidebar is collapsed */}
       <AnimatePresence>
         {collapsed && (
-          <motion.button
+          <m.button
             initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
             onClick={() => setCollapsed(false)}
             title="Show sidebar (Ctrl+B)"
+            aria-label="Show sidebar"
             className="fixed left-2 top-1/2 z-30 flex h-9 w-6 -translate-y-1/2 items-center justify-center
                        rounded-lg border border-white/10 bg-navy-900/80 text-slate-500 backdrop-blur-md
                        transition-colors hover:text-cyan-300"
           >
             <ChevronRight />
-          </motion.button>
+          </m.button>
         )}
       </AnimatePresence>
 
       <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[1240px] justify-end px-8 pt-6">
+          <FreshnessBar />
+        </div>
         <AnimatePresence mode="wait">
-          <motion.div
+          <m.div
             key={loc.pathname}
             {...pageTransition}
-            className="mx-auto max-w-[1240px] px-8 py-8"
+            className="mx-auto max-w-[1240px] px-8 pb-8 pt-2"
           >
-            <Outlet />
-          </motion.div>
+            <ErrorBoundary>
+              <Suspense fallback={<Loading />}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
+          </m.div>
         </AnimatePresence>
       </main>
 

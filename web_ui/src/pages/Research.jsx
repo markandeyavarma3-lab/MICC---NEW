@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { api, fmt } from "../lib/api";
 import { Glass, Section, Pill, Table, useApi, TableSkeleton, ErrorState } from "../components/ui";
 import { stagger } from "../lib/motion";
@@ -66,17 +66,17 @@ export default function Research() {
         <Section title="ML challengers under CPCV" sub="15 purged paths · promotion needs beat-champion AND DSR>0.5 AND stability">
           <Glass className="p-4">
             {ml_experiments.map((e, i) => (
-              <motion.div key={e.exp_id} {...stagger(i, { cap: 0.3 })}
+              <m.div key={e.exp_id} {...stagger(i, { cap: 0.3 })}
                           className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">
                 <div>
                   <span className="font-medium text-slate-200">{e.model_family}</span>
                   <span className="ml-2 text-[11px] text-slate-500">median path Sharpe <span className="num">{fmt.num(med(mlBy[e.model_family] || []), 2)}</span> vs champion 1.00</span>
                 </div>
                 <Pill tone={VERDICT_TONE[e.status] || "slate"}>{e.status}</Pill>
-              </motion.div>
+              </m.div>
             ))}
             {events.map((e, i) => (
-              <motion.div key={e.event_type} {...stagger(i, { cap: 0.3 })}
+              <m.div key={e.event_type} {...stagger(i, { cap: 0.3 })}
                           className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">
                 <div>
                   <span className="font-medium text-slate-200">{e.event_type}</span>
@@ -85,7 +85,7 @@ export default function Research() {
                   </span>
                 </div>
                 <Pill tone={VERDICT_TONE[e.verdict]}>{e.verdict}</Pill>
-              </motion.div>
+              </m.div>
             ))}
             {spine.filter((s) => s.book === "IV").map((s) => (
               <div key={s.book} className="mb-2 flex items-center justify-between rounded-xl border border-white/[0.06] px-4 py-3 transition-colors hover:bg-white/[0.02]">

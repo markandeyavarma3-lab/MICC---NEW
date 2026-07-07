@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { EASE_OUT, stagger } from "../lib/motion";
+import { reportFetch, subscribeFreshness, requestRefresh } from "../lib/freshness";
 
 export function Glass({ children, className = "", hover = false, ...rest }) {
   return (
@@ -95,7 +96,7 @@ export function Pill({ children, tone = "slate" }) {
  *                  or null/undefined for a non-sortable column.
  *   searchKeys:    array of (row) => string, joined into the search haystack.
  */
-export function Table({ cols, rows, render, sortAccessors, searchKeys }) {
+export function Table({ cols, rows, render, sortAccessors, searchKeys, animateRows = true }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState(null); // { i: colIndex, dir: 1|-1 }
 
@@ -126,6 +127,7 @@ export function Table({ cols, rows, render, sortAccessors, searchKeys }) {
           <div className="relative">
             <SearchIcon />
             <input
+              aria-label="Search table"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
@@ -143,34 +145,45 @@ export function Table({ cols, rows, render, sortAccessors, searchKeys }) {
             <tr className="text-left text-slate-500">
               {cols.map((c, i) => {
                 const canSort = !!sortAccessors?.[i];
+                const ariaSort = sort?.i === i ? (sort.dir === -1 ? "descending" : "ascending") : canSort ? "none" : undefined;
                 return (
-                  <th key={c} onClick={canSort ? () => toggleSort(i) : undefined}
-                      className={`border-b border-white/10 px-3 py-2 font-medium ${canSort ? "cursor-pointer select-none transition-colors hover:text-slate-300" : ""}`}>
-                    <span className="inline-flex items-center gap-1">
-                      {c}
-                      {canSort && (
-                        <span className={`text-[9px] transition-opacity ${sort?.i === i ? "opacity-100 text-cyan-300" : "opacity-30"}`}>
+                  <th key={c} aria-sort={ariaSort}
+                      className="border-b border-white/10 px-3 py-2 font-medium">
+                    {canSort ? (
+                      <button
+                        onClick={() => toggleSort(i)}
+                        className="inline-flex items-center gap-1 select-none transition-colors hover:text-slate-300"
+                      >
+                        {c}
+                        <span aria-hidden="true" className={`text-[9px] transition-opacity ${sort?.i === i ? "opacity-100 text-cyan-300" : "opacity-30"}`}>
                           {sort?.i === i && sort.dir === -1 ? "▼" : "▲"}
                         </span>
-                      )}
-                    </span>
+                      </button>
+                    ) : c}
                   </th>
                 );
               })}
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r, i) => (
-              <motion.tr
-                key={i}
-                {...stagger(i, { delay: 0.012, cap: 0.35, y: 3 })}
-                className="border-b border-white/[0.04] transition-colors duration-150 hover:bg-white/[0.03]"
-              >
-                {render(r).map((cell, j) => (
-                  <td key={j} className="px-3 py-2 whitespace-nowrap">{cell}</td>
-                ))}
-              </motion.tr>
-            ))}
+            {sorted.map((r, i) => {
+              const cells = render(r).map((cell, j) => (
+                <td key={j} className="px-3 py-2 whitespace-nowrap">{cell}</td>
+              ));
+              return animateRows ? (
+                <m.tr
+                  key={i}
+                  {...stagger(i, { delay: 0.012, cap: 0.35, y: 3 })}
+                  className="border-b border-white/[0.04] transition-colors duration-150 hover:bg-white/[0.03]"
+                >
+                  {cells}
+                </m.tr>
+              ) : (
+                <tr key={i} className="border-b border-white/[0.04] transition-colors duration-150 hover:bg-white/[0.03]">
+                  {cells}
+                </tr>
+              );
+            })}
             {sorted.length === 0 && (
               <tr><td colSpan={cols.length} className="px-3 py-8 text-center text-slate-500">no matches</td></tr>
             )}
@@ -260,7 +273,7 @@ export function Loading() {
 
 export function ErrorState({ error, retry }) {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_OUT }}
+    <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_OUT }}
       className="flex h-64 flex-col items-center justify-center gap-3 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
         !
@@ -273,22 +286,68 @@ export function ErrorState({ error, retry }) {
           Retry
         </button>
       )}
-    </motion.div>
+    </m.div>
   );
 }
 
 export function useApi(fetcher) {
-  const [state, setState] = useState({ data: null, err: null });
+  const [state, setState] = useState({ data: null, err: null, fetchedAt: null });
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
     fetcher()
-      .then((data) => live && setState({ data, err: null }))
-      .catch((err) => live && setState({ data: null, err }));
+      .then((data) => {
+        if (!live) return;
+        reportFetch();
+        setState({ data, err: null, fetchedAt: Date.now() });
+      })
+      .catch((err) => live && setState((s) => ({ ...s, err })));
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
+  // a global "Refresh" click (see FreshnessBar) bumps every mounted useApi at
+  // once -- the only way stale-but-still-open pages ever get new data, since
+  // there's no polling and api() no longer caches.
+  useEffect(() => {
+    const onRefresh = () => setTick((t) => t + 1);
+    window.addEventListener("micc:refresh", onRefresh);
+    return () => window.removeEventListener("micc:refresh", onRefresh);
+  }, []);
   return { ...state, retry: () => setTick((t) => t + 1) };
+}
+
+function relTime(ts) {
+  if (!ts) return null;
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 5) return "just now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
+}
+
+/** Global "last updated / Refresh" pill -- mounted once in Layout. Tracks the
+ * most recent successful fetch app-wide and lets you force every currently
+ * mounted page's data to refetch, since nothing here auto-polls. */
+export function FreshnessBar() {
+  const [at, setAt] = useState(null);
+  const [, setTock] = useState(0);
+  useEffect(() => subscribeFreshness(setAt), []);
+  useEffect(() => {
+    const id = setInterval(() => setTock((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <button
+      onClick={requestRefresh}
+      title="Refetch this page's data"
+      className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1
+                 text-[11px] text-slate-500 transition-colors hover:border-white/20 hover:text-slate-300"
+    >
+      <span aria-hidden="true">↻</span>
+      <span>{at ? `Updated ${relTime(at)}` : "Refresh"}</span>
+    </button>
+  );
 }
 
 export const tooltipStyle = {
@@ -303,7 +362,7 @@ export const tooltipStyle = {
 
 export function SearchIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
          strokeLinecap="round" strokeLinejoin="round"
          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500">
       <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />

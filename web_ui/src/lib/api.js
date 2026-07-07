@@ -1,13 +1,13 @@
 // Thin fetch layer over the MICC Python API (same origin in prod; vite proxy in dev).
-const cache = new Map();
-
+// Deliberately no caching here: the backend queries the live DB per-request, and
+// this desk gets checked repeatedly through the day -- a permanent cache meant
+// "Desk R-PnL"/"Drawdown" could silently go stale for an entire tab session with
+// no way to tell. Freshness is manual (see lib/freshness.js): pages refetch on
+// mount and on an explicit user-triggered refresh, never on a timer.
 export async function api(path) {
-  if (cache.has(path)) return cache.get(path);
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
-  const data = await res.json();
-  cache.set(path, data);
-  return data;
+  return res.json();
 }
 
 // categorical palette — validated (dataviz six checks, dark surface #0a1222)
@@ -27,6 +27,7 @@ export const fmt = {
   inr: (v) => (v == null ? "—" : "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })),
   lakh: (v) => (v == null ? "—" : "₹" + (v / 1e5).toFixed(1) + "L"),
   pct: (v, d = 1) => (v == null ? "—" : (v * 100).toFixed(d) + "%"),
+  pctSigned: (v, d = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%"),
   num: (v, d = 2) => (v == null ? "—" : Number(v).toFixed(d)),
   x: (v) => (v == null ? "—" : Number(v).toFixed(0) + "x"),
 };

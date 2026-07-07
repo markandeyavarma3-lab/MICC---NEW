@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { m, AnimatePresence } from "framer-motion";
 import { api, fmt } from "../lib/api";
 import { Glass, Pill, Skeleton } from "./ui";
 import { useSymbol } from "../lib/symbolContext";
 import { EASE_OUT, springDrawer } from "../lib/motion";
+import { useFocusTrap } from "../lib/a11y";
 
 /** Unified per-symbol profile: asset features + a live idea card summary (if
  * one exists) + recent events — composed client-side from endpoints that
@@ -22,6 +23,8 @@ function DrawerBody({ symbol, onClose }) {
   const [asset, setAsset] = useState(undefined); // undefined = loading, null = 404
   const [idea, setIdea] = useState(null);
   const [events, setEvents] = useState([]);
+  const panelRef = useRef(null);
+  useFocusTrap(panelRef, true);
 
   useEffect(() => {
     let live = true;
@@ -48,13 +51,17 @@ function DrawerBody({ symbol, onClose }) {
 
   return (
     <>
-      <motion.div
+      <m.div
         className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.25, ease: EASE_OUT }}
         onClick={onClose}
       />
-      <motion.aside
+      <m.aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${symbol} profile`}
         className="fixed right-0 top-0 z-50 h-full w-[440px] overflow-y-auto border-l border-white/10 bg-navy-900/95 p-6 backdrop-blur-2xl"
         initial={{ x: 460 }} animate={{ x: 0 }} exit={{ x: 460 }}
         transition={springDrawer}
@@ -64,8 +71,8 @@ function DrawerBody({ symbol, onClose }) {
             <div className="text-xl font-bold text-slate-100">{symbol}</div>
             <div className="text-xs text-slate-500">{asset?.sector || (asset === null ? "no data on file" : <Skeleton className="mt-1 inline-block h-3 w-24 align-middle" />)}</div>
           </div>
-          <motion.button whileTap={{ scale: 0.92 }} onClick={onClose}
-            className="rounded-lg border border-white/10 px-2.5 py-1 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200">✕</motion.button>
+          <m.button whileTap={{ scale: 0.92 }} onClick={onClose} aria-label="Close"
+            className="rounded-lg border border-white/10 px-2.5 py-1 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200">✕</m.button>
         </div>
 
         {asset === undefined && (
@@ -136,7 +143,7 @@ function DrawerBody({ symbol, onClose }) {
             </Glass>
           </div>
         )}
-      </motion.aside>
+      </m.aside>
     </>
   );
 }

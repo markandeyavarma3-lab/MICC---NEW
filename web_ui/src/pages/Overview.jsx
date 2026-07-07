@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { api, C, fmt } from "../lib/api";
 import {
@@ -54,7 +54,7 @@ export default function Overview() {
       {/* ===== HERO: regime + risk state ===== */}
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Glass className="relative overflow-hidden p-6 lg:col-span-2">
-          <motion.div
+          <m.div
             key={gateOn ? "on" : "off"}
             className="pointer-events-none absolute inset-0"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, ease: EASE_OUT }}

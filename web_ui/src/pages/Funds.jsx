@@ -9,6 +9,7 @@ export default function Funds() {
     <Section title="Equity funds" sub="direct-growth plans ranked by 3-year Sharpe · from the 847-fund scorecard">
       <Glass className="p-2">
         <Table
+          animateRows={false}
           cols={["Fund", "AMC", "Category", "3y CAGR", "3y Sharpe", "Max DD"]}
           rows={funds.data}
           searchKeys={[(r) => r.scheme_name, (r) => r.amc, (r) => r.cat_short]}
