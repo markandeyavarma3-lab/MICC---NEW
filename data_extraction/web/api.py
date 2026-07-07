@@ -15,18 +15,37 @@ Endpoints:
   /api/deals                insider/bulk smart-money intel
   /api/fno                  F&O positioning intel
   /api/ideas                live Idea-Engine cards (entry/stop/target + confidence)
+  /api/portfolio            open positions (mark-to-market) + closed trade history
   /api/thesis/{id}          one thesis: card, trades, per-pillar score audit
   /api/asset/{symbol}       single-asset profile (features, sector, signal)
 """
 import re
 import sqlite3
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path(r"D:\marketDB\db\market.db")
 
+# System holding horizons in TRADING days (build_bands/calibrate_exits): a swing
+# idea is worked over ~21 td, a positional over ~63 td, after which an untouched
+# trade expires. Calendar target date ~= entry + horizon_td * 7/5.
+HORIZON_TD = {"swing": 21, "positional": 63}
+_TD_TO_CAL = 7 / 5
+
 
 def _rows(c, sql, params=()):
     return [dict(r) for r in c.execute(sql, params).fetchall()]
+
+
+def _iso(d):
+    return d.strftime("%Y-%m-%d")
+
+
+def _parse_date(s):
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
 
 
 def handle(path):
@@ -38,7 +57,7 @@ def handle(path):
             return 200, {"service": "MICC API", "endpoints": [
                 "/api/regime", "/api/strategies", "/api/signals", "/api/recommendations",
                 "/api/paper", "/api/funds", "/api/deals", "/api/fno", "/api/ideas",
-                "/api/thesis/{id}", "/api/asset/{symbol}"]}
+                "/api/portfolio", "/api/thesis/{id}", "/api/asset/{symbol}"]}
 
         if path == "/api/regime":
             br = c.execute("SELECT date,pct_above_200dma,pct_above_50dma FROM market_breadth "
@@ -88,9 +107,50 @@ def handle(path):
                              "notional,in_book,pillar_json,context_json "
                              "FROM idea_card WHERE card_date=? ORDER BY confidence_score DESC", (cd,))
             import json as _json
+            today = date.today()
             for row in cards:
                 row["pillars"] = _json.loads(row.pop("pillar_json") or "{}")
                 row["context"] = _json.loads(row.pop("context_json") or "{}")
+
+                # --- lifecycle enrichment (issue date, target date, days left, P/L) ---
+                # issue date = the open trade's entry_date, else the card_date itself
+                tr = c.execute("SELECT entry_date FROM trade WHERE thesis_id=? "
+                               "AND exit_date IS NULL ORDER BY trade_id LIMIT 1",
+                               (row["thesis_id"],)).fetchone()
+                issue = _parse_date(tr["entry_date"]) if tr else _parse_date(cd)
+                row["issue_date"] = _iso(issue) if issue else None
+
+                horizon_td = HORIZON_TD.get(row["timeframe_class"], 21)
+                row["horizon_td"] = horizon_td
+                if issue:
+                    tgt = issue + timedelta(days=round(horizon_td * _TD_TO_CAL))
+                    row["target_date"] = _iso(tgt)
+                    row["days_left"] = (tgt - today).days   # negative once elapsed
+                    row["days_held"] = (today - issue).days
+                else:
+                    row["target_date"] = row["days_left"] = row["days_held"] = None
+
+                # profit target: target price vs entry (fixed at issue)
+                if row["entry"]:
+                    row["profit_target_pct"] = round(row["target"] / row["entry"] - 1, 4)
+                    row["stop_risk_pct"] = round(row["stop"] / row["entry"] - 1, 4)
+                else:
+                    row["profit_target_pct"] = row["stop_risk_pct"] = None
+
+                # current P/L: latest RAW close (stock_data is current; stock_data_adj lags)
+                px = c.execute("SELECT date, close FROM stock_data WHERE symbol=? "
+                               "ORDER BY date DESC LIMIT 1", (row["symbol"],)).fetchone()
+                if px and row["entry"]:
+                    row["current_price"] = round(px["close"], 2)
+                    row["price_as_of"] = px["date"]
+                    row["current_pl_pct"] = round(px["close"] / row["entry"] - 1, 4)
+                    # progress toward target (0 at entry, 1 at target, can be <0 or >1)
+                    span = row["target"] - row["entry"]
+                    row["target_progress"] = round((px["close"] - row["entry"]) / span, 4) if span else None
+                else:
+                    row["current_price"] = row["price_as_of"] = None
+                    row["current_pl_pct"] = row["target_progress"] = None
+
             return 200, {"card_date": cd, "n": len(cards), "cards": cards}
 
         if path == "/api/best":
@@ -166,6 +226,61 @@ def handle(path):
                                  "FROM sector_regime_daily WHERE date="
                                  "(SELECT MAX(date) FROM sector_regime_daily) "
                                  "ORDER BY rs_vs_nifty DESC")
+
+        if path == "/api/portfolio":
+            # Open positions: mark-to-market against the latest RAW close per symbol
+            # (stock_data is current to today; stock_data_adj lags ~2wk and would
+            # falsely show ~0% P&L). Entry price was recorded raw too, so raw-vs-raw
+            # is internally consistent over these short holding windows.
+            # ~15 of the open trade rows predate size_shares being tracked
+            # (size_shares NULL) -- included but flagged, not silently dropped, so
+            # the page is honest about what it can and can't compute P&L for.
+            open_pos = _rows(c, """
+                SELECT t.trade_id, th.symbol, th.thesis_type, th.timeframe_class,
+                       t.entry_date, t.entry_price, t.stop, t.target, t.size_shares,
+                       (SELECT sd.close FROM stock_data sd
+                        WHERE sd.symbol = th.symbol ORDER BY sd.date DESC LIMIT 1) AS current_price,
+                       (SELECT MAX(sd.date) FROM stock_data sd
+                        WHERE sd.symbol = th.symbol) AS price_as_of
+                FROM trade t JOIN thesis th ON th.thesis_id = t.thesis_id
+                WHERE t.exit_date IS NULL
+                ORDER BY t.entry_date DESC""")
+            for p in open_pos:
+                if p["current_price"] is not None:
+                    p["current_price"] = round(p["current_price"], 2)
+            for p in open_pos:
+                if p["current_price"] is not None and p["entry_price"]:
+                    p["unrealized_pct"] = round(p["current_price"] / p["entry_price"] - 1, 4)
+                else:
+                    p["unrealized_pct"] = None
+                if p["size_shares"] and p["current_price"] is not None:
+                    p["notional"] = round(p["entry_price"] * p["size_shares"], 2)
+                    p["unrealized_value"] = round((p["current_price"] - p["entry_price"]) * p["size_shares"], 2)
+                else:
+                    p["notional"] = None
+                    p["unrealized_value"] = None
+
+            closed = _rows(c, """
+                SELECT t.trade_id, th.symbol, th.thesis_type, th.timeframe_class,
+                       t.entry_date, t.entry_price, t.exit_date, t.exit_price,
+                       t.exit_reason, t.realized_return
+                FROM trade t JOIN thesis th ON th.thesis_id = t.thesis_id
+                WHERE t.exit_date IS NOT NULL
+                ORDER BY t.exit_date DESC""")
+
+            sized = [p for p in open_pos if p["notional"] is not None]
+            summary = {
+                "open_count": len(open_pos),
+                "open_unsized_count": len(open_pos) - len(sized),
+                "deployed": round(sum(p["notional"] for p in sized), 2) if sized else 0,
+                "unrealized_total": round(sum(p["unrealized_value"] for p in sized), 2) if sized else 0,
+                "closed_count": len(closed),
+                "win_rate": (round(sum(1 for t in closed if (t["realized_return"] or 0) > 0) / len(closed), 4)
+                             if closed else None),
+                "avg_realized_return": (round(sum(t["realized_return"] or 0 for t in closed) / len(closed), 4)
+                                        if closed else None),
+            }
+            return 200, {"summary": summary, "open": open_pos, "closed": closed}
 
         m = re.match(r"/api/thesis/(\d+)$", path)
         if m:

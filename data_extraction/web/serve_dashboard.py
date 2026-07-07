@@ -97,12 +97,21 @@ class Handler(BaseHTTPRequestHandler):
         if SPA.exists():
             rel = self.path.split("?")[0].lstrip("/") or "index.html"
             f = (SPA / rel).resolve()
-            if not str(f).startswith(str(SPA)) or not f.is_file():
+            is_fallback = not str(f).startswith(str(SPA)) or not f.is_file()
+            if is_fallback:
                 f = SPA / "index.html"                 # SPA fallback (hash router)
             data = f.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", MIME.get(f.suffix, "application/octet-stream"))
             self.send_header("Content-Length", str(len(data)))
+            # index.html (and any hash-router fallback to it) must never be cached --
+            # it references content-hashed asset filenames, so a stale cached copy
+            # points at assets a later rebuild has already deleted (blank-page bug).
+            # The hashed assets themselves are safe to cache forever.
+            if f.name == "index.html" or is_fallback:
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            else:
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
             self.end_headers()
             self.wfile.write(data)
             return
